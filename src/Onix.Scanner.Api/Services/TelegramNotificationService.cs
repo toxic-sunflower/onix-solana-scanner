@@ -116,10 +116,18 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             try
             {
+                var updatesJson = System.Text.Json.JsonSerializer.Serialize(new[] { "message", "callback_query" });
                 var url = $"https://api.telegram.org/bot{_botToken}/getUpdates" +
-                          $"?offset={_lastUpdateId}&allowed_updates=[\"message\",\"callback_query\"]";
+                          $"?offset={_lastUpdateId}&allowed_updates={Uri.EscapeDataString(updatesJson)}";
                 var response = await http.GetStringAsync(url, ct);
                 using var doc = System.Text.Json.JsonDocument.Parse(response);
+
+                if (!doc.RootElement.GetProperty("ok").GetBoolean())
+                {
+                    _logger.LogWarning("Telegram API error: {Error}", doc.RootElement.GetProperty("description").GetString());
+                    continue;
+                }
+
                 var result = doc.RootElement.GetProperty("result");
                 var updates = System.Text.Json.JsonSerializer.Deserialize<Update[]>(result.GetRawText());
 
@@ -137,7 +145,7 @@ public sealed class TelegramNotificationService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Telegram polling error");
+                _logger.LogWarning(ex, "Telegram polling error");
             }
 
             await Task.Delay(2000, ct);
