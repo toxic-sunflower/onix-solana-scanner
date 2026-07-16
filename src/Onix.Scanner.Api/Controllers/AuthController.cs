@@ -149,6 +149,17 @@ public class AuthController : ControllerBase
         var sessions = await _userRepo.GetSessionsAsync(userId, ct);
         var others = sessions.Where(s => s.Id != current.Id).ToList();
 
+        if (others.Count == 0)
+        {
+            await _userRepo.IncrementTokenVersionAsync(userId, ct);
+            var user = await _userRepo.GetByIdAsync(userId, ct);
+            if (user is null) return Unauthorized();
+            var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+            current.LastJti = jti;
+            await _userRepo.UpdateRefreshTokenLastUsedAsync(current.Id, IpAddress, ct);
+            return Ok(new { token = accessToken });
+        }
+
         var jtis = others.Select(s => s.LastJti).Where(j => !string.IsNullOrEmpty(j)).ToList();
         if (jtis.Count > 0)
             await _userRepo.BlacklistJtisAsync(userId, jtis!, ct);
@@ -156,13 +167,13 @@ public class AuthController : ControllerBase
         foreach (var s in others)
             await _userRepo.DeleteSessionAsync(s.Id, ct);
 
-        var user = await _userRepo.GetByIdAsync(userId, ct);
-        if (user is null) return Unauthorized();
+        var user2 = await _userRepo.GetByIdAsync(userId, ct);
+        if (user2 is null) return Unauthorized();
 
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-        current.LastJti = jti;
+        var accessToken2 = _jwt.GenerateAccessToken(user2.Id, user2.TelegramId, user2.Role, user2.TokenVersion, out var jti2);
+        current.LastJti = jti2;
         await _userRepo.UpdateRefreshTokenLastUsedAsync(current.Id, IpAddress, ct);
-        return Ok(new { token = accessToken });
+        return Ok(new { token = accessToken2 });
     }
 
     [Authorize]
