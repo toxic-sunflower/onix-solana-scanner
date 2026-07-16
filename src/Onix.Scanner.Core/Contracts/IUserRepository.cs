@@ -8,5 +8,15 @@ public interface IUserRepository
     Task<User?> GetByTelegramIdAsync(long telegramId, CancellationToken ct = default);
     Task<User> CreateAsync(User user, CancellationToken ct = default);
     Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default);
+    Task<int> GetTokenVersionAsync(Guid userId, CancellationToken ct = default);
+    Task IncrementTokenVersionAsync(Guid userId, CancellationToken ct = default);
+    Task SaveRefreshTokenAsync(RefreshToken token, CancellationToken ct = default);
+    Task<RefreshToken?> GetRefreshTokenAsync(string tokenHash, CancellationToken ct = default);
+    Task DeleteRefreshTokenAsync(Guid tokenId, CancellationToken ct = default);
+    Task DeleteUserRefreshTokensAsync(Guid userId, CancellationToken ct = default);
+    Task<List<RefreshToken>> GetSessionsAsync(Guid userId, CancellationToken ct = default);
+    Task<RefreshToken?> GetSessionByIdAsync(Guid sessionId, Guid userId, CancellationToken ct = default);
+    Task DeleteSessionAsync(Guid sessionId, CancellationToken ct = default);
+    Task UpdateRefreshTokenLastUsedAsync(Guid tokenId, string? ip, CancellationToken ct = default);
     Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default);
 }

@@ -10,6 +10,7 @@ public class User
     public string? AuthToken { get; set; }
     public DateTime? AuthTokenExpiresAt { get; set; }
     public UserRole Role { get; set; }
+    public int TokenVersion { get; set; }
     public long? ChatId { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }

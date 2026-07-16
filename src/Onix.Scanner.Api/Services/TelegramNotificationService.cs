@@ -146,11 +146,18 @@ public sealed class TelegramNotificationService : BackgroundService
 
                             await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
 
-                            var authToken = _jwt.GenerateToken(user.Id, user.TelegramId, user.Role);
+                            var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+                            var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+                            await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
+                            {
+                                UserId = user.Id,
+                                TokenHash = hash,
+                                ExpiresAt = DateTime.UtcNow.AddDays(30),
+                            }, ct);
 
                             await _bot.SendMessage(
                                 chatId: chatId,
-                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
+                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}&refresh={refreshToken}",
                                 cancellationToken: ct);
                         }
                         else
@@ -167,6 +174,53 @@ public sealed class TelegramNotificationService : BackgroundService
                             chatId: chatId,
                             text: "🟢 Scanner is running",
                             cancellationToken: ct);
+                    }
+                    else if (text.Equals("/logout", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (fromId is null) continue;
+
+                        using var scope = _services.CreateScope();
+                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
+                        if (user is not null)
+                        {
+                            await userRepo.DeleteUserRefreshTokensAsync(user.Id, ct);
+                            await userRepo.IncrementTokenVersionAsync(user.Id, ct);
+                        }
+
+                        await _bot.SendMessage(
+                            chatId: chatId,
+                            text: "🔒 Logged out of all devices",
+                            cancellationToken: ct);
+                    }
+                    else if (text.Equals("/sessions", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (fromId is null) continue;
+
+                        using var scope = _services.CreateScope();
+                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
+                        if (user is null)
+                        {
+                            await _bot.SendMessage(chatId: chatId, text: "No account found. Use /start to create one.", cancellationToken: ct);
+                            continue;
+                        }
+
+                        var sessions = await userRepo.GetSessionsAsync(user.Id, ct);
+                        if (sessions.Count == 0)
+                        {
+                            await _bot.SendMessage(chatId: chatId, text: "No active sessions.", cancellationToken: ct);
+                            continue;
+                        }
+
+                        var msg = $"*{sessions.Count} active session(s):*\n\n" +
+                                  string.Join("\n", sessions.Select((s, i) =>
+                                      $"{i + 1}. {s.DisplayName}\n" +
+                                      $"   IP: {s.IpAddress ?? "N/A"}\n" +
+                                      $"   Last used: {s.LastUsedAt?.ToString("g") ?? "Never"}\n" +
+                                      $"   Created: {s.CreatedAt:g}"));
+
+                        await _bot.SendMessage(chatId: chatId, text: msg, parseMode: ParseMode.Markdown, cancellationToken: ct);
                     }
                 }
             }

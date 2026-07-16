@@ -10,6 +10,7 @@ namespace Onix.Scanner.Api.Controllers;
 [ApiController]
 [Route("api/v1/user-tokens")]
 [Authorize]
+[CheckTokenVersion]
 public class UserTokensController : ControllerBase
 {
     private readonly ITokenRepository _tokenRepo;

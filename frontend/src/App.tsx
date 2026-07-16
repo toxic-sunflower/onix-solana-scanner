@@ -3,6 +3,7 @@ import Dashboard from './components/Dashboard';
 import ChartPage from './components/ChartPage';
 import Settings from './components/Settings';
 import Landing from './components/Landing';
+import { logout, logoutAll } from './lib/auth';
 
 function getTelegramUser() {
   const tg = (window as any).Telegram?.WebApp;
@@ -22,11 +23,6 @@ export default function App() {
     setToken(t);
   }, []);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('auth_token');
-    setToken(null);
-  }, []);
-
   useEffect(() => {
     const tgUser = getTelegramUser();
     if (tgUser && !token) {
@@ -40,10 +36,14 @@ export default function App() {
         }),
       })
         .then(res => res.json())
-        .then(data => handleToken(data.token))
+        .then(data => {
+          localStorage.setItem('auth_token', data.token);
+          localStorage.setItem('refresh_token', data.refreshToken);
+          setToken(data.token);
+        })
         .catch(console.error);
     }
-  }, [token, handleToken]);
+  }, [token]);
 
   if (!token) return <Landing onToken={handleToken} />;
 
@@ -55,7 +55,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200">
-      <div className="flex justify-end p-2">
+      <div className="flex justify-end p-2 gap-2">
+        <button onClick={() => navigate('settings')} className="px-2 py-1 bg-gray-800 rounded text-xs hover:bg-gray-700">Settings</button>
         <button onClick={logout} className="px-2 py-1 bg-gray-800 rounded text-xs hover:bg-gray-700">Logout</button>
       </div>
       {page === 'dashboard' && <Dashboard onNavigate={navigate} />}

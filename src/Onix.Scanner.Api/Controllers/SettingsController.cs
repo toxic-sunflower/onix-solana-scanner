@@ -9,6 +9,7 @@ namespace Onix.Scanner.Api.Controllers;
 [ApiController]
 [Route("api/v1/settings")]
 [Authorize]
+[CheckTokenVersion]
 public class SettingsController : ControllerBase
 {
     private readonly IUserSettingsRepository _settingsRepo;

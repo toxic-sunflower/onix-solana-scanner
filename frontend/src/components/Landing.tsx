@@ -4,7 +4,9 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const refresh = params.get('refresh');
     if (token) {
+      if (refresh) localStorage.setItem('refresh_token', refresh);
       window.history.replaceState({}, '', '/');
       onToken(token);
     }

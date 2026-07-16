@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Models;
 
@@ -9,6 +10,7 @@ namespace Onix.Scanner.Api.Controllers;
 [ApiController]
 [Route("api/v1/admin")]
 [Authorize(Roles = "Admin")]
+[CheckTokenVersion]
 public class AdminController : ControllerBase
 {
     private readonly ITokenRepository _tokenRepo;

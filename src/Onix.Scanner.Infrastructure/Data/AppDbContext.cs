@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
     public DbSet<UserToken> UserTokens => Set<UserToken>();
     public DbSet<SpreadTick> SpreadTicks => Set<SpreadTick>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -116,6 +117,19 @@ public class AppDbContext : DbContext
             e.Property(x => x.QualityStatus).HasMaxLength(10).HasConversion<string>().HasDefaultValue(QualityStatus.Valid);
             e.HasIndex(x => new { x.TokenId, x.CalculatedAt }).HasDatabaseName("idx_ticks_token_time");
             e.HasIndex(x => x.QualityStatus).HasDatabaseName("idx_ticks_quality");
+        });
+
+        modelBuilder.Entity<RefreshToken>(e =>
+        {
+            e.ToTable("refresh_tokens");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.TokenHash).HasMaxLength(64).IsRequired();
+            e.Property(x => x.DeviceName).HasMaxLength(200);
+            e.Property(x => x.IpAddress).HasMaxLength(45);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("idx_refresh_tokens_hash");
+            e.HasIndex(x => x.UserId).HasDatabaseName("idx_refresh_tokens_user_id");
         });
     }
 }
