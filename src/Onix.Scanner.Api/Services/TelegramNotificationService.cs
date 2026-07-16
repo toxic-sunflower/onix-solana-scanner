@@ -14,7 +14,6 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly ILogger<TelegramNotificationService> _logger;
     private readonly ITelegramBotClient? _bot;
     private readonly IServiceProvider _services;
-    private readonly string? _botToken;
     private readonly string _appUrl;
     private readonly JwtTokenService _jwt;
     private readonly TotpService _totp;
@@ -25,7 +24,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
     private readonly Channel<TokenCardDto> _alertChannel =
         Channel.CreateBounded<TokenCardDto>(100);
-    private long _lastUpdateId;
 
     public TelegramNotificationService(
         IConfiguration config,
@@ -44,7 +42,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (!string.IsNullOrEmpty(token))
         {
-            _botToken = token;
             _bot = new TelegramBotClient(token);
             _logger.LogInformation("Telegram bot initialized");
         }
@@ -61,15 +58,60 @@ public sealed class TelegramNotificationService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_bot is null) return;
+        _logger.LogInformation("TelegramNotificationService starting");
 
         var alertTask = ProcessAlertsAsync(stoppingToken);
-        var pollingTask = PollUpdatesAsync(stoppingToken);
 
-        await Task.WhenAny(alertTask, pollingTask);
+        if (_bot is not null)
+        {
+            try
+            {
+                _logger.LogInformation("Starting bot polling via StartReceiving");
+                _bot.StartReceiving(
+                    updateHandler: HandleUpdateAsync,
+                    errorHandler: OnPollingError,
+                    receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
+                    {
+                        AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
+                    },
+                    cancellationToken: stoppingToken);
+                _logger.LogInformation("Bot polling started");
+
+                // Keep alive until cancellation
+                await Task.Delay(Timeout.Infinite, stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Bot polling failed");
+            }
+        }
+
+        _logger.LogInformation("TelegramNotificationService stopping, awaiting alert task");
+        await alertTask;
     }
 
-    // ── Alert sending (unchanged) ──
+    private Task OnPollingError(ITelegramBotClient bot, Exception exception, CancellationToken ct)
+    {
+        _logger.LogError(exception, "Telegram polling error");
+        return Task.CompletedTask;
+    }
+
+    private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
+    {
+        try
+        {
+            if (update.CallbackQuery is not null)
+                await HandleCallbackQuery(update.CallbackQuery, ct);
+            else if (update.Message?.Text is not null)
+                await HandleMessage(update.Message, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error handling update {UpdateId}", update.Id);
+        }
+    }
+
+    // ── Alert sending ──
 
     private async Task ProcessAlertsAsync(CancellationToken stoppingToken)
     {
@@ -106,57 +148,13 @@ public sealed class TelegramNotificationService : BackgroundService
         }
     }
 
-    // ── Polling with text + callback queries ──
-
-    private async Task PollUpdatesAsync(CancellationToken ct)
-    {
-        var http = new HttpClient();
-
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                var updatesJson = System.Text.Json.JsonSerializer.Serialize(new[] { "message", "callback_query" });
-                var url = $"https://api.telegram.org/bot{_botToken}/getUpdates" +
-                          $"?offset={_lastUpdateId}&allowed_updates={Uri.EscapeDataString(updatesJson)}";
-                var response = await http.GetStringAsync(url, ct);
-                using var doc = System.Text.Json.JsonDocument.Parse(response);
-
-                if (!doc.RootElement.GetProperty("ok").GetBoolean())
-                {
-                    _logger.LogWarning("Telegram API error: {Error}", doc.RootElement.GetProperty("description").GetString());
-                    continue;
-                }
-
-                var result = doc.RootElement.GetProperty("result");
-                var updates = System.Text.Json.JsonSerializer.Deserialize<Update[]>(result.GetRawText());
-
-                if (updates is null || updates.Length == 0) continue;
-
-                foreach (var update in updates)
-                {
-                    _lastUpdateId = update.Id + 1;
-
-                    if (update.CallbackQuery is not null)
-                        await HandleCallbackQuery(update.CallbackQuery, ct);
-                    else if (update.Message?.Text is not null)
-                        await HandleMessage(update.Message, ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Telegram polling error");
-            }
-
-            await Task.Delay(2000, ct);
-        }
-    }
-
     // ── Message handler ──
 
     private async Task HandleMessage(Message msg, CancellationToken ct)
     {
-        var text = msg.Text!;
+        var text = msg.Text;
+        if (text is null) return;
+
         var chatId = msg.Chat.Id;
         var fromId = msg.From?.Id;
         if (fromId is null) return;
@@ -189,7 +187,6 @@ public sealed class TelegramNotificationService : BackgroundService
         }
         else
         {
-            // Unknown command → show main menu if registered
             using var scope = _services.CreateScope();
             var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
             var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
@@ -212,7 +209,7 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             await _bot!.AnswerCallbackQuery(query.Id, cancellationToken: ct);
         }
-        catch { /* ignore */ }
+        catch { }
 
         switch (query.Data)
         {
@@ -249,7 +246,6 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             if (user is null)
             {
-                // Create user first
                 user = new Shared.Models.User
                 {
                     TelegramId = fromId,
@@ -264,12 +260,10 @@ public sealed class TelegramNotificationService : BackgroundService
 
             if (!user.Is2FAEnabled)
             {
-                // Need to set up 2FA first
                 await ShowRegistrationRequired(chatId, ct);
                 return;
             }
 
-            // Challenge OTP
             _totp.StartChallenge(chatId, user.Id, "auth");
             _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
             await _bot!.SendMessage(
@@ -283,7 +277,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (user is null)
         {
-            // Welcome screen for new users
             var welcome = $"🧬 *ONIX Solana Scanner*\n\n" +
                           "Real-time arbitrage scanner between BingX Futures and Jupiter DEX.\n\n" +
                           "• Track spreads in real time\n" +
@@ -350,7 +343,6 @@ public sealed class TelegramNotificationService : BackgroundService
         var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
         if (user is null)
         {
-            // First time — create user
             user = new Shared.Models.User
             {
                 TelegramId = fromId,
@@ -374,7 +366,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _states.TryRemove(chatId, out _);
 
-        // Create login link immediately after registration
         var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
         var (refreshToken, hash) = _jwt.GenerateRefreshToken();
         await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
@@ -410,7 +401,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (!user.Is2FAEnabled)
         {
-            // Start registration flow for 2FA setup
             await StartRegistration(chatId, fromId, ct);
             return;
         }
@@ -470,7 +460,6 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        // Success — generate link
         if (result.UsedBackup && result.MatchedHash is not null)
         {
             user.TwoFactorBackupCodes = _totp.RemoveUsedBackupCode(user.TwoFactorBackupCodes ?? "", result.MatchedHash);
@@ -496,9 +485,7 @@ public sealed class TelegramNotificationService : BackgroundService
             ? $"✅ Login link:\n{link}\n\n⚠️ You used a backup code. Go to Settings on the website to set up a new authenticator."
             : $"✅ Login link:\n{link}\n\nThis link expires in 30 days.";
 
-        await _bot!.SendMessage(chatId: chatId,
-            text: linkMsg,
-            cancellationToken: ct);
+        await _bot!.SendMessage(chatId: chatId, text: linkMsg, cancellationToken: ct);
         await ShowMainMenu(chatId, ct);
     }
 
@@ -530,7 +517,7 @@ public sealed class TelegramNotificationService : BackgroundService
             cancellationToken: ct);
     }
 
-    // ── Signal sending (unchanged) ──
+    // ── Signal sending ──
 
     private async Task SendSignalAsync(long chatId, TokenCardDto dto, CancellationToken ct)
     {
@@ -561,8 +548,6 @@ public sealed class TelegramNotificationService : BackgroundService
             chatId, sent.MessageId, dto.Symbol, dto.SpreadPct);
     }
 }
-
-// ── Bot state ──
 
 enum BotStep { None, Registration, AwaitingOtp }
 
