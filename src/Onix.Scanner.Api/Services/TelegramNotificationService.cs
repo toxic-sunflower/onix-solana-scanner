@@ -13,6 +13,7 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly ITelegramBotClient? _bot;
     private readonly IServiceProvider _services;
     private readonly string? _botToken;
+    private readonly string _appUrl;
 
     private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
 
@@ -27,6 +28,7 @@ public sealed class TelegramNotificationService : BackgroundService
     {
         _logger = logger;
         _services = services;
+        _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
 
         var token = config["Telegram:BotToken"];
 
@@ -148,8 +150,7 @@ public sealed class TelegramNotificationService : BackgroundService
 
                             await _bot.SendMessage(
                                 chatId: chatId,
-                                text: $"✅ Auth successful! Your token: `{authToken}`\nUse this in X-Auth-Token header.",
-                                parseMode: ParseMode.Markdown,
+                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
                                 cancellationToken: ct);
                         }
                         else

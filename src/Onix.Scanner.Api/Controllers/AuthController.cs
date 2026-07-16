@@ -9,16 +9,20 @@ namespace Onix.Scanner.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepo;
+    private readonly string _botUsername;
 
-    public AuthController(IUserRepository userRepo)
+    public AuthController(IUserRepository userRepo, IConfiguration config)
     {
         _userRepo = userRepo;
+        _botUsername = config.GetValue<string>("Telegram:BotUsername") ?? "YOUR_BOT";
     }
 
     [HttpGet("telegram")]
     public ActionResult LoginViaTelegram([FromQuery] long telegramId, [FromQuery] string? username, [FromQuery] string? name)
     {
-        return Ok(new { url = $"https://t.me/YOUR_BOT?start=auth_{telegramId}" });
+        var miniAppUrl = $"{Request.Scheme}://{Request.Host}";
+        var botLink = $"https://t.me/{_botUsername}?start=auth_{telegramId}";
+        return Ok(new { url = botLink, miniAppUrl });
     }
 
     [HttpPost("verify")]

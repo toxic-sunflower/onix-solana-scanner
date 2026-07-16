@@ -7,6 +7,11 @@ interface UserSettings {
   timezone: string;
 }
 
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('auth_token');
+  return token ? { 'X-Auth-Token': token, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
+
 export default function Settings({ onBack }: { onBack: () => void }) {
   const [settings, setSettings] = useState<UserSettings>({
     minimalSpreadPct: 5,
@@ -16,7 +21,7 @@ export default function Settings({ onBack }: { onBack: () => void }) {
   });
 
   useEffect(() => {
-    fetch('/api/v1/settings')
+    fetch('/api/v1/settings', { headers: authHeaders() })
       .then(res => res.json())
       .then(setSettings)
       .catch(console.error);
@@ -25,7 +30,7 @@ export default function Settings({ onBack }: { onBack: () => void }) {
   const save = async () => {
     await fetch('/api/v1/settings', {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders(),
       body: JSON.stringify(settings),
     });
   };

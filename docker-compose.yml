@@ -9,8 +9,10 @@ services:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://0.0.0.0:5000
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Telegram__BotUsername=${TELEGRAM_BOT_USERNAME}
       - Encryption__Key=${ENCRYPTION_KEY}
       - ConnectionStrings__Default=Host=localhost;Database=onix_scanner;Username=onix;Password=${DB_PASSWORD}
+      - App__Url=${APP_URL}
     healthcheck:
       test: curl -f http://localhost:5000/api/v1/health || exit 1
       interval: 15s
