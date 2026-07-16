@@ -122,44 +122,34 @@ public sealed class TelegramNotificationService : BackgroundService
 
                     if (text.StartsWith("/start"))
                     {
-                        var parts = text.Split(' ');
-                        var payload = parts.Length > 1 ? parts[1] : "";
+                        var fromId = update.Message.From?.Id;
+                        if (fromId is null) continue;
 
-                        if (payload.StartsWith("auth_") && long.TryParse(payload["auth_".Length..], out var tid) && fromId == tid)
+                        using var scope = _services.CreateScope();
+                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
+                        if (user is null)
                         {
-                            using var scope = _services.CreateScope();
-                            var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-                            var user = await userRepo.GetByTelegramIdAsync(tid, ct);
-                            if (user is null)
+                            user = new Shared.Models.User
                             {
-                                user = new Shared.Models.User
-                                {
-                                    TelegramId = tid,
-                                    TelegramUsername = update.Message.From!.Username,
-                                    DisplayName = update.Message.From.FirstName,
-                                    LastLoginAt = DateTime.UtcNow
-                                };
-                                user = await userRepo.CreateAsync(user, ct);
-                            }
-
-                            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
-
-                            var authToken = Guid.NewGuid().ToString("N");
-                            var expiresAt = DateTime.UtcNow.AddDays(30);
-                            await userRepo.UpdateAuthTokenAsync(user.Id, authToken, expiresAt, ct);
-
-                            await _bot.SendMessage(
-                                chatId: chatId,
-                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
-                                cancellationToken: ct);
+                                TelegramId = fromId.Value,
+                                TelegramUsername = update.Message.From!.Username,
+                                DisplayName = update.Message.From.FirstName,
+                                LastLoginAt = DateTime.UtcNow
+                            };
+                            user = await userRepo.CreateAsync(user, ct);
                         }
-                        else
-                        {
-                            await _bot.SendMessage(
-                                chatId: chatId,
-                                text: "Welcome! Use /start auth_YOUR_TELEGRAM_ID to authenticate.",
-                                cancellationToken: ct);
-                        }
+
+                        await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+
+                        var authToken = Guid.NewGuid().ToString("N");
+                        var expiresAt = DateTime.UtcNow.AddDays(30);
+                        await userRepo.UpdateAuthTokenAsync(user.Id, authToken, expiresAt, ct);
+
+                        await _bot.SendMessage(
+                            chatId: chatId,
+                            text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
+                            cancellationToken: ct);
                     }
                     else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
                     {

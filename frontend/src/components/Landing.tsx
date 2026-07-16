@@ -1,9 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 export default function Landing({ onToken }: { onToken: (token: string) => void }) {
-  const [telegramId, setTelegramId] = useState('');
-  const [loading, setLoading] = useState(false);
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -13,19 +10,6 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
     }
   }, [onToken]);
 
-  const loginViaTelegram = async () => {
-    if (!telegramId) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/v1/auth/telegram?telegramId=${telegramId}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      window.open(data.url, '_blank');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="max-w-md text-center">
@@ -34,25 +18,17 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
           Real-time spread monitoring between BingX Futures and Jupiter DEX
         </p>
 
-        <div className="flex flex-col gap-3">
-          <input
-            type="number"
-            placeholder="Your Telegram ID"
-            value={telegramId}
-            onChange={e => setTelegramId(e.target.value)}
-            className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-center"
-          />
-          <button
-            onClick={loginViaTelegram}
-            disabled={loading || !telegramId}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg text-white font-medium"
-          >
-            {loading ? 'Connecting...' : 'Login via Telegram'}
-          </button>
-        </div>
+        <a
+          href="https://t.me/OnixSolanaScanner_Bot"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg text-white font-medium transition-colors"
+        >
+          Login via Telegram
+        </a>
 
         <p className="text-gray-500 text-sm mt-4">
-          Enter your Telegram ID, then click to authenticate via bot
+          Open the bot, send /start, then click the link you receive
         </p>
       </div>
     </div>
