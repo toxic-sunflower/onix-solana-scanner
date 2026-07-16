@@ -31,7 +31,7 @@ jobs:
             cat > .env << EOF
             DB_PASSWORD=$DB_PASSWORD
             TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
-            TELEGRAM_BOT_USERNAME=onix_scanner_bot
+            TELEGRAM_BOT_USERNAME=OnixSolanaScanner_Bot
             ENCRYPTION_KEY=$ENCRYPTION_KEY
             APP_URL=https://89.124.82.95
             EOF
