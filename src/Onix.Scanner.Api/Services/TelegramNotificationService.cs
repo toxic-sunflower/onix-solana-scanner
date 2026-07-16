@@ -14,6 +14,7 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly IServiceProvider _services;
     private readonly string? _botToken;
     private readonly string _appUrl;
+    private readonly Auth.JwtTokenService _jwt;
 
     private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
 
@@ -24,11 +25,13 @@ public sealed class TelegramNotificationService : BackgroundService
     public TelegramNotificationService(
         IConfiguration config,
         ILogger<TelegramNotificationService> logger,
-        IServiceProvider services)
+        IServiceProvider services,
+        Auth.JwtTokenService jwt)
     {
         _logger = logger;
         _services = services;
         _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
+        _jwt = jwt;
 
         var token = config["Telegram:BotToken"];
 
@@ -122,15 +125,17 @@ public sealed class TelegramNotificationService : BackgroundService
 
                     if (text.StartsWith("/start"))
                     {
-                        var fromId = update.Message.From?.Id;
-                        if (fromId is null) continue;
+                        var parts = text.Split(' ');
+                        var payload = parts.Length > 1 ? parts[1] : "";
 
-                        using var scope = _services.CreateScope();
-                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
-                        if (user is null)
+                        if (payload.StartsWith("auth_"))
                         {
-                            user = new Shared.Models.User
+                            if (fromId is null) continue;
+
+                            using var scope = _services.CreateScope();
+                            var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+
+                            var user = new Shared.Models.User
                             {
                                 TelegramId = fromId.Value,
                                 TelegramUsername = update.Message.From!.Username,
@@ -138,18 +143,23 @@ public sealed class TelegramNotificationService : BackgroundService
                                 LastLoginAt = DateTime.UtcNow
                             };
                             user = await userRepo.CreateAsync(user, ct);
+
+                            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+
+                            var authToken = _jwt.GenerateToken(user.Id, user.TelegramId, user.Role);
+
+                            await _bot.SendMessage(
+                                chatId: chatId,
+                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
+                                cancellationToken: ct);
                         }
-
-                        await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
-
-                        var authToken = Guid.NewGuid().ToString("N");
-                        var expiresAt = DateTime.UtcNow.AddDays(30);
-                        await userRepo.UpdateAuthTokenAsync(user.Id, authToken, expiresAt, ct);
-
-                        await _bot.SendMessage(
-                            chatId: chatId,
-                            text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}",
-                            cancellationToken: ct);
+                        else
+                        {
+                            await _bot.SendMessage(
+                                chatId: chatId,
+                                text: "Welcome to ONIX Solana Scanner!\n\nGo to http://89.124.82.95 to log in.",
+                                cancellationToken: ct);
+                        }
                     }
                     else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
                     {

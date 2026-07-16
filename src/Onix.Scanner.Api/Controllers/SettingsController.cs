@@ -1,12 +1,14 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
-using Onix.Scanner.Shared.Dtos;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/settings")]
+[Authorize]
 public class SettingsController : ControllerBase
 {
     private readonly IUserSettingsRepository _settingsRepo;
@@ -19,10 +21,10 @@ public class SettingsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<ActionResult<UserSettings>> Get(
-        [FromHeader(Name = "X-Auth-Token")] string? authToken, CancellationToken ct)
+    public async Task<ActionResult<UserSettings>> Get(CancellationToken ct)
     {
-        var user = await ResolveUser(authToken, ct);
+        var userId = User.GetUserId();
+        var user = await _userRepo.GetByIdAsync(userId, ct);
         if (user is null) return Unauthorized();
 
         var settings = await _settingsRepo.GetByTelegramIdAsync(user.TelegramId, ct);
@@ -43,11 +45,10 @@ public class SettingsController : ControllerBase
     }
 
     [HttpPatch]
-    public async Task<ActionResult> Patch(
-        [FromHeader(Name = "X-Auth-Token")] string? authToken,
-        [FromBody] PatchSettingsRequest request, CancellationToken ct)
+    public async Task<ActionResult> Patch([FromBody] PatchSettingsRequest request, CancellationToken ct)
     {
-        var user = await ResolveUser(authToken, ct);
+        var userId = User.GetUserId();
+        var user = await _userRepo.GetByIdAsync(userId, ct);
         if (user is null) return Unauthorized();
 
         var settings = await _settingsRepo.GetByTelegramIdAsync(user.TelegramId, ct);
@@ -74,12 +75,6 @@ public class SettingsController : ControllerBase
         settings.UpdatedAt = DateTime.UtcNow;
         await _settingsRepo.UpsertAsync(settings, ct);
         return NoContent();
-    }
-
-    private async Task<User?> ResolveUser(string? authToken, CancellationToken ct)
-    {
-        if (string.IsNullOrEmpty(authToken)) return null;
-        return await _userRepo.GetByAuthTokenAsync(authToken, ct);
     }
 
     public class PatchSettingsRequest

@@ -18,6 +18,7 @@ public class ApiEndpointTests : IClassFixture<PostgreSqlFixture>, IClassFixture<
         {
             builder.UseSetting("ConnectionStrings:Default", dbFixture.ConnectionString);
             builder.UseSetting("Encryption:Key", "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=");
+            builder.UseSetting("Telegram:BotToken", "");
             builder.ConfigureServices(services =>
             {
                 var descriptor = services.SingleOrDefault(d =>

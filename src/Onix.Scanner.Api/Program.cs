@@ -1,8 +1,11 @@
-using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Core;
 using Onix.Scanner.Infrastructure.Data;
@@ -16,6 +19,42 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
 builder.Services.AddControllers();
+
+var encryptionKey = Convert.FromBase64String(
+    builder.Configuration.GetValue<string>("Encryption:Key")
+    ?? throw new InvalidOperationException("Encryption:Key is required"));
+if (encryptionKey.Length != 16 && encryptionKey.Length != 24 && encryptionKey.Length != 32)
+    throw new InvalidOperationException("Encryption:Key must decode to 16, 24, or 32 bytes");
+
+var jwtKey = encryptionKey.Length == 16 || encryptionKey.Length == 24
+    ? encryptionKey : encryptionKey[..16];
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(o =>
+    {
+        o.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            ValidateLifetime = true,
+            IssuerSigningKey = new SymmetricSecurityKey(jwtKey),
+        };
+
+        o.Events = new JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var authHeader = context.Request.Headers["X-Auth-Token"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(authHeader))
+                {
+                    context.Token = authHeader;
+                }
+                return Task.CompletedTask;
+            }
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -37,13 +76,9 @@ builder.Services.AddDbContextFactory<AppDbContext>(o =>
         b.DefaultNameTranslator = new Npgsql.NameTranslation.NpgsqlSnakeCaseNameTranslator())));
 builder.Services.AddNpgsqlDataSource(connectionString);
 
-var encryptionKey = Convert.FromBase64String(
-    builder.Configuration.GetValue<string>("Encryption:Key")
-    ?? throw new InvalidOperationException("Encryption:Key is required"));
-if (encryptionKey.Length != 16 && encryptionKey.Length != 24 && encryptionKey.Length != 32)
-    throw new InvalidOperationException("Encryption:Key must decode to 16, 24, or 32 bytes");
 builder.Services.AddSingleton<IEncryptionService>(
     new AesEncryptionService(encryptionKey));
+builder.Services.AddSingleton(new JwtTokenService(jwtKey));
 
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
 builder.Services.AddScoped<ITokenRepository, TokenRepository>();
@@ -69,6 +104,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseRateLimiter();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

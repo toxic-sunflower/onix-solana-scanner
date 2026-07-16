@@ -10,28 +10,17 @@ public class UserRepository : IUserRepository
 
     public UserRepository(AppDbContext db) => _db = db;
 
+    public Task<User?> GetByIdAsync(Guid userId, CancellationToken ct = default) =>
+        _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+
     public Task<User?> GetByTelegramIdAsync(long telegramId, CancellationToken ct = default) =>
         _db.Users.FirstOrDefaultAsync(u => u.TelegramId == telegramId, ct);
-
-    public async Task<User?> GetByAuthTokenAsync(string token, CancellationToken ct = default) =>
-        await _db.Users.FirstOrDefaultAsync(
-            u => u.AuthToken == token && u.AuthTokenExpiresAt > DateTime.UtcNow, ct);
 
     public async Task<User> CreateAsync(User user, CancellationToken ct = default)
     {
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
         return user;
-    }
-
-    public async Task UpdateAuthTokenAsync(Guid userId, string? token, DateTime? expiresAt,
-        CancellationToken ct = default)
-    {
-        await _db.Users.Where(u => u.Id == userId)
-            .ExecuteUpdateAsync(s => s
-                .SetProperty(u => u.AuthToken, token)
-                .SetProperty(u => u.AuthTokenExpiresAt, expiresAt)
-                .SetProperty(u => u.UpdatedAt, DateTime.UtcNow), ct);
     }
 
     public async Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default)

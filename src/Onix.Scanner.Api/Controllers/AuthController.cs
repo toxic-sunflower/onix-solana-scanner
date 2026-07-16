@@ -1,4 +1,7 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Models;
 
@@ -10,55 +13,53 @@ public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepo;
     private readonly string _botUsername;
+    private readonly JwtTokenService _jwt;
 
-    public AuthController(IUserRepository userRepo, IConfiguration config)
+    public AuthController(IUserRepository userRepo, IConfiguration config, JwtTokenService jwt)
     {
         _userRepo = userRepo;
+        _jwt = jwt;
         _botUsername = config.GetValue<string>("Telegram:BotUsername") ?? "YOUR_BOT";
     }
 
     [HttpGet("telegram")]
     public ActionResult LoginViaTelegram([FromQuery] long telegramId, [FromQuery] string? username, [FromQuery] string? name)
     {
-        var miniAppUrl = $"{Request.Scheme}://{Request.Host}";
         var botLink = $"https://t.me/{_botUsername}?start=auth_{telegramId}";
-        return Ok(new { url = botLink, miniAppUrl });
+        return Ok(new { url = botLink });
     }
 
     [HttpPost("verify")]
     public async Task<ActionResult> VerifyTelegram([FromBody] VerifyRequest request, CancellationToken ct)
     {
-        var user = await _userRepo.GetByTelegramIdAsync(request.TelegramId, ct);
-        if (user is null)
-        {
-            user = new User
+        var user = await _userRepo.GetByTelegramIdAsync(request.TelegramId, ct)
+            ?? new User
             {
                 TelegramId = request.TelegramId,
                 TelegramUsername = request.Username,
                 DisplayName = request.DisplayName,
                 LastLoginAt = DateTime.UtcNow
             };
+
+        if (user.Id == Guid.Empty)
             user = await _userRepo.CreateAsync(user, ct);
-        }
 
-        var token = Guid.NewGuid().ToString("N");
-        var expiresAt = DateTime.UtcNow.AddDays(30);
-        await _userRepo.UpdateAuthTokenAsync(user.Id, token, expiresAt, ct);
-
-        return Ok(new { token, userId = user.Id, expiresAt });
+        var token = _jwt.GenerateToken(user.Id, user.TelegramId, user.Role);
+        return Ok(new { token, userId = user.Id, expiresAt = DateTime.UtcNow.AddDays(30) });
     }
 
+    [Authorize]
     [HttpGet("me")]
-    public async Task<ActionResult> Me([FromHeader(Name = "X-Auth-Token")] string? authToken, CancellationToken ct)
+    public ActionResult Me()
     {
-        if (string.IsNullOrEmpty(authToken))
-            return Unauthorized();
-
-        var user = await _userRepo.GetByAuthTokenAsync(authToken, ct);
-        if (user is null)
-            return Unauthorized();
-
-        return Ok(new { user.Id, user.TelegramId, user.TelegramUsername, user.DisplayName, role = user.Role.ToString() });
+        return Ok(new
+        {
+            Id = User.GetUserId(),
+            TelegramId = User.GetTelegramId(),
+            TelegramUsername = User.FindFirstValue("telegram_id"),
+            DisplayName = User.Identity?.Name,
+            role = User.FindFirstValue(ClaimTypes.Role)
+        });
     }
 
     public class VerifyRequest
