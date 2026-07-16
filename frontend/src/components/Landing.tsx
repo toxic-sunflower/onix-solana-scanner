@@ -15,7 +15,7 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
   const loginViaTelegram = async () => {
     setLoading(true);
     try {
-      const tid = crypto.randomUUID();
+      const tid = Date.now() + Math.floor(Math.random() * 1000);
       const res = await fetch(`/api/v1/auth/telegram?telegramId=${tid}`);
       const data = await res.json();
       window.open(data.url, '_blank');
