@@ -1,0 +1,121 @@
+using Microsoft.EntityFrameworkCore;
+using Onix.Scanner.Shared;
+using Onix.Scanner.Shared.Models;
+
+namespace Onix.Scanner.Infrastructure.Data;
+
+public class AppDbContext : DbContext
+{
+    public DbSet<Token> Tokens => Set<Token>();
+    public DbSet<Proxy> Proxies => Set<Proxy>();
+    public DbSet<User> Users => Set<User>();
+    public DbSet<UserSettings> UserSettings => Set<UserSettings>();
+    public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
+    public DbSet<UserToken> UserTokens => Set<UserToken>();
+    public DbSet<SpreadTick> SpreadTicks => Set<SpreadTick>();
+
+    public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.HasPostgresExtension("uuid-ossp");
+
+        modelBuilder.Entity<Token>(e =>
+        {
+            e.ToTable("tokens");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.Symbol).HasMaxLength(20).IsRequired();
+            e.Property(x => x.Name).HasMaxLength(100);
+            e.Property(x => x.SolanaMint).HasMaxLength(64).IsRequired();
+            e.Property(x => x.BingxSymbol).HasMaxLength(50).IsRequired();
+            e.Property(x => x.JupiterInputMint).HasMaxLength(64).IsRequired();
+            e.Property(x => x.QuoteAmount).HasColumnType("numeric(38,18)").HasDefaultValue(0.01m);
+            e.Property(x => x.BingxUrl).IsRequired();
+            e.Property(x => x.JupiterUrl).IsRequired();
+            e.Property(x => x.SolscanUrl).IsRequired();
+            e.Property(x => x.Enabled).HasDefaultValue(true);
+            e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
+            e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>().HasDefaultValue(TokenHealthStatus.Disabled);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.Symbol).HasDatabaseName("idx_tokens_symbol");
+            e.HasIndex(x => x.Enabled).HasDatabaseName("idx_tokens_enabled");
+            e.HasIndex(x => x.SolanaMint).IsUnique().HasDatabaseName("idx_tokens_solana_mint");
+        });
+
+        modelBuilder.Entity<Proxy>(e =>
+        {
+            e.ToTable("proxies");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.Type).HasMaxLength(10).HasDefaultValue("HTTP");
+            e.Property(x => x.Host).HasMaxLength(255).IsRequired();
+            e.Property(x => x.Enabled).HasDefaultValue(true);
+            e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>().HasDefaultValue(ProxyStatus.Disabled);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+        });
+
+        modelBuilder.Entity<User>(e =>
+        {
+            e.ToTable("users");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.TelegramId).IsRequired();
+            e.Property(x => x.Role).HasMaxLength(20).HasConversion<string>().HasDefaultValue(UserRole.User);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.TelegramId).IsUnique().HasDatabaseName("idx_users_telegram_id");
+            e.HasIndex(x => x.AuthToken).HasDatabaseName("idx_users_auth_token");
+        });
+
+        modelBuilder.Entity<UserSettings>(e =>
+        {
+            e.ToTable("user_settings");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.MinimalSpreadPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
+            e.Property(x => x.TelegramNotificationsEnabled).HasDefaultValue(true);
+            e.Property(x => x.CooldownSeconds).HasDefaultValue(300);
+            e.Property(x => x.Timezone).HasMaxLength(50).HasDefaultValue("UTC");
+            e.Property(x => x.Role).HasMaxLength(20).HasConversion<string>().HasDefaultValue(UserRole.User);
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.TelegramId).IsUnique().HasDatabaseName("idx_user_settings_telegram_id");
+        });
+
+        modelBuilder.Entity<UserPreferences>(e =>
+        {
+            e.ToTable("user_preferences");
+            e.HasKey(x => x.UserId);
+            e.Property(x => x.MinimalSpreadPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
+            e.Property(x => x.CooldownSeconds).HasDefaultValue(300);
+            e.Property(x => x.Timezone).HasMaxLength(50).HasDefaultValue("UTC");
+            e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+        });
+
+        modelBuilder.Entity<UserToken>(e =>
+        {
+            e.ToTable("user_tokens");
+            e.HasKey(x => new { x.UserId, x.TokenId });
+            e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
+            e.Property(x => x.AlertThresholdPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
+        });
+
+        modelBuilder.Entity<SpreadTick>(e =>
+        {
+            e.ToTable("spread_ticks");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedOnAdd();
+            e.Property(x => x.BingxAskPrice).HasColumnType("numeric(38,18)").IsRequired();
+            e.Property(x => x.JupiterBuyPrice).HasColumnType("numeric(38,18)").IsRequired();
+            e.Property(x => x.SpreadPct).HasColumnType("numeric(20,10)").IsRequired();
+            e.Property(x => x.BingxLatencyMs).HasDefaultValue(0);
+            e.Property(x => x.JupiterLatencyMs).HasDefaultValue(0);
+            e.Property(x => x.QualityStatus).HasMaxLength(10).HasConversion<string>().HasDefaultValue(QualityStatus.Valid);
+            e.HasIndex(x => new { x.TokenId, x.CalculatedAt }).HasDatabaseName("idx_ticks_token_time");
+            e.HasIndex(x => x.QualityStatus).HasDatabaseName("idx_ticks_quality");
+        });
+    }
+}

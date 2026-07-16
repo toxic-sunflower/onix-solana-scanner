@@ -1,0 +1,37 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: app
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD
+          script: |
+            if [ ! -d /home/app/onix ]; then
+              git clone $REPO_URL /home/app/onix
+            fi
+            cd /home/app/onix
+            git fetch origin main && git reset --hard origin/main
+
+            cat > .env << EOF
+            DB_PASSWORD=$DB_PASSWORD
+            TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+            ENCRYPTION_KEY=$ENCRYPTION_KEY
+            EOF
+
+            docker compose up -d --build
+            docker image prune -f
+        env:
+          REPO_URL: https://github.com/${{ github.repository }}.git
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}

@@ -1,0 +1,9 @@
+.git/
+node_modules/
+bin/
+obj/
+*.md
+.gitignore
+.gitattributes
+*.sln
+*.slnx

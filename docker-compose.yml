@@ -1,0 +1,19 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: src/Onix.Scanner.Api/Dockerfile
+    network_mode: host
+    env_file: .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://0.0.0.0:5000
+      - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
+      - Encryption__Key=${ENCRYPTION_KEY}
+      - ConnectionStrings__Default=Host=localhost;Database=onix_scanner;Username=onix;Password=${DB_PASSWORD}
+    healthcheck:
+      test: curl -f http://localhost:5000/api/v1/health || exit 1
+      interval: 15s
+      retries: 5
+      start_period: 60s
+    restart: unless-stopped

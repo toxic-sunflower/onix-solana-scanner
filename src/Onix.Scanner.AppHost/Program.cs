@@ -1,0 +1,12 @@
+var builder = DistributedApplication.CreateBuilder(args);
+
+var postgres = builder.AddPostgres("postgres")
+    .WithDataVolume("onix-pgdata");
+
+var database = postgres.AddDatabase("Default", "onix_scanner");
+
+builder.AddProject<Projects.Onix_Scanner_Api>("api")
+    .WithReference(database)
+    .WaitFor(database);
+
+builder.Build().Run();

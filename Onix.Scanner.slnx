@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Onix.Scanner.Api/Onix.Scanner.Api.csproj" />
+    <Project Path="src/Onix.Scanner.AppHost/Onix.Scanner.AppHost.csproj" />
+    <Project Path="src/Onix.Scanner.Core/Onix.Scanner.Core.csproj" />
+    <Project Path="src/Onix.Scanner.Infrastructure/Onix.Scanner.Infrastructure.csproj" />
+    <Project Path="src/Onix.Scanner.Shared/Onix.Scanner.Shared.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Onix.Scanner.Tests/Onix.Scanner.Tests.csproj" />
+  </Folder>
+</Solution>

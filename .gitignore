@@ -1,0 +1,32 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.sln.docstates
+
+# Frontend build output (served by API)
+src/Onix.Scanner.Api/wwwroot/
+
+# User Secrets
+secrets.json
+
+# Node / frontend
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vs/
+.vscode/
+.idea/
+.run/
+
+# Environment
+.env
+
+# Swap
+*.swp
