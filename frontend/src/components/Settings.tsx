@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { authFetch, logoutAll, getSessions, revokeSession, revokeOthers } from '../lib/auth';
+import { authFetch, logout, logoutAll, getSessions, revokeSession, revokeOthers } from '../lib/auth';
 
 interface UserSettings {
   minimalSpreadPct: number;
@@ -112,6 +112,15 @@ export default function Settings({ onBack }: { onBack: () => void }) {
             </button>
           </div>
         )}
+
+        {sessions.length > 0 && (
+          <hr className="border-gray-700" />
+        )}
+
+        <button onClick={logout}
+          className="px-4 py-2 bg-red-900 hover:bg-red-800 rounded text-sm self-start">
+          Logout this device
+        </button>
       </div>
     </div>
   );

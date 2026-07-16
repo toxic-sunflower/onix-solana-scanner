@@ -15,14 +15,16 @@ public class JwtTokenService
         _key = new SymmetricSecurityKey(key);
     }
 
-    public string GenerateAccessToken(Guid userId, long telegramId, UserRole role, int tokenVersion)
+    public string GenerateAccessToken(Guid userId, long telegramId, UserRole role, int tokenVersion, out string jti)
     {
+        jti = Guid.NewGuid().ToString();
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim("telegram_id", telegramId.ToString()),
             new Claim(ClaimTypes.Role, role.ToString()),
             new Claim("token_version", tokenVersion.ToString()),
+            new Claim(JwtRegisteredClaimNames.Jti, jti),
         };
 
         var token = new JwtSecurityToken(

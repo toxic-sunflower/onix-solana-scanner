@@ -7,6 +7,7 @@ public class RefreshToken
     public string TokenHash { get; set; } = string.Empty;
     public string? DeviceName { get; set; }
     public string? IpAddress { get; set; }
+    public string? LastJti { get; set; }
     public DateTime? LastUsedAt { get; set; }
     public DateTime ExpiresAt { get; set; }
     public DateTime CreatedAt { get; set; }

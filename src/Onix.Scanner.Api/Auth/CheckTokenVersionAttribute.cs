@@ -1,7 +1,7 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
-using Onix.Scanner.Api.Auth;
 
 namespace Onix.Scanner.Api.Auth;
 
@@ -12,9 +12,20 @@ public class CheckTokenVersionAttribute : Attribute, IAsyncAuthorizationFilter
     {
         var userId = context.HttpContext.User.GetUserId();
         var tokenVersion = int.Parse(context.HttpContext.User.FindFirstValue("token_version") ?? "0");
+        var jti = context.HttpContext.User.FindFirstValue(JwtRegisteredClaimNames.Jti) ?? "";
 
-        var userRepo = context.HttpContext.RequestServices
-            .GetRequiredService<Core.Contracts.IUserRepository>();
+        var services = context.HttpContext.RequestServices;
+        var userRepo = services.GetRequiredService<Core.Contracts.IUserRepository>();
+
+        if (!string.IsNullOrEmpty(jti))
+        {
+            var blacklisted = await userRepo.IsJtiBlacklistedAsync(jti);
+            if (blacklisted)
+            {
+                context.Result = new UnauthorizedObjectResult(new { error = "token_revoked", message = "Session terminated" });
+                return;
+            }
+        }
 
         var currentVersion = await userRepo.GetTokenVersionAsync(userId);
         if (currentVersion != tokenVersion)

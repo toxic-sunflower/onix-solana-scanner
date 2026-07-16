@@ -92,6 +92,41 @@ public class UserRepository : IUserRepository
         await _db.RefreshTokens.Where(r => r.UserId == userId && r.Id != keepTokenId).ExecuteDeleteAsync(ct);
     }
 
+    public async Task BlacklistJtiAsync(Guid userId, string jti, CancellationToken ct = default)
+    {
+        if (string.IsNullOrEmpty(jti)) return;
+        await _db.BlacklistedJtis.AddAsync(new BlacklistedJti
+        {
+            UserId = userId,
+            Jti = jti,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+        }, ct);
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task BlacklistJtisAsync(Guid userId, List<string> jtis, CancellationToken ct = default)
+    {
+        var valid = jtis.Where(j => !string.IsNullOrEmpty(j)).ToList();
+        if (valid.Count == 0) return;
+        _db.BlacklistedJtis.AddRange(valid.Select(j => new BlacklistedJti
+        {
+            UserId = userId,
+            Jti = j,
+            ExpiresAt = DateTime.UtcNow.AddMinutes(15),
+        }));
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<bool> IsJtiBlacklistedAsync(string jti, CancellationToken ct = default)
+    {
+        return await _db.BlacklistedJtis.AnyAsync(b => b.Jti == jti && b.ExpiresAt > DateTime.UtcNow, ct);
+    }
+
+    public async Task CleanupExpiredBlacklistedJtisAsync(CancellationToken ct = default)
+    {
+        await _db.BlacklistedJtis.Where(b => b.ExpiresAt <= DateTime.UtcNow).ExecuteDeleteAsync(ct);
+    }
+
     public async Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default)
     {
         return await (from u in _db.Users

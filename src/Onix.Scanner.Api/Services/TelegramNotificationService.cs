@@ -146,12 +146,13 @@ public sealed class TelegramNotificationService : BackgroundService
 
                             await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
 
-                            var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+                            var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
                             var (refreshToken, hash) = _jwt.GenerateRefreshToken();
                             await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
                             {
                                 UserId = user.Id,
                                 TokenHash = hash,
+                                LastJti = jti,
                                 ExpiresAt = DateTime.UtcNow.AddDays(30),
                             }, ct);
 

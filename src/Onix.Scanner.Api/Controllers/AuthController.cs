@@ -52,7 +52,7 @@ public class AuthController : ControllerBase
             user = await _userRepo.CreateAsync(user, ct);
         }
 
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
         var (refreshToken, hash) = _jwt.GenerateRefreshToken();
 
         await _userRepo.SaveRefreshTokenAsync(new RefreshToken
@@ -61,6 +61,7 @@ public class AuthController : ControllerBase
             TokenHash = hash,
             DeviceName = DeviceName,
             IpAddress = IpAddress,
+            LastJti = jti,
             ExpiresAt = DateTime.UtcNow.AddDays(30),
         }, ct);
 
@@ -87,7 +88,7 @@ public class AuthController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
         var (newRefreshToken, newHash) = _jwt.GenerateRefreshToken();
 
         await _userRepo.SaveRefreshTokenAsync(new RefreshToken
@@ -96,6 +97,7 @@ public class AuthController : ControllerBase
             TokenHash = newHash,
             DeviceName = stored.DeviceName,
             IpAddress = IpAddress,
+            LastJti = jti,
             LastUsedAt = DateTime.UtcNow,
             ExpiresAt = DateTime.UtcNow.AddDays(30),
         }, ct);
@@ -115,7 +117,11 @@ public class AuthController : ControllerBase
         var hash = JwtTokenService.HashRefreshToken(request.RefreshToken);
         var stored = await _userRepo.GetRefreshTokenAsync(hash, ct);
         if (stored is not null)
+        {
+            if (!string.IsNullOrEmpty(stored.LastJti))
+                await _userRepo.BlacklistJtiAsync(stored.UserId, stored.LastJti, ct);
             await _userRepo.DeleteRefreshTokenAsync(stored.Id, ct);
+        }
 
         return NoContent();
     }
@@ -140,13 +146,22 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = "invalid_refresh_token" });
 
         var userId = User.GetUserId();
-        await _userRepo.DeleteOtherSessionsAsync(userId, current.Id, ct);
-        await _userRepo.IncrementTokenVersionAsync(userId, ct);
+        var sessions = await _userRepo.GetSessionsAsync(userId, ct);
+        var others = sessions.Where(s => s.Id != current.Id).ToList();
+
+        var jtis = others.Select(s => s.LastJti).Where(j => !string.IsNullOrEmpty(j)).ToList();
+        if (jtis.Count > 0)
+            await _userRepo.BlacklistJtisAsync(userId, jtis!, ct);
+
+        foreach (var s in others)
+            await _userRepo.DeleteSessionAsync(s.Id, ct);
 
         var user = await _userRepo.GetByIdAsync(userId, ct);
         if (user is null) return Unauthorized();
 
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        current.LastJti = jti;
+        await _userRepo.UpdateRefreshTokenLastUsedAsync(current.Id, IpAddress, ct);
         return Ok(new { token = accessToken });
     }
 
@@ -186,6 +201,11 @@ public class AuthController : ControllerBase
         if (session is null)
             return NotFound();
 
+        if (!string.IsNullOrEmpty(session.LastJti))
+            await _userRepo.BlacklistJtiAsync(userId, session.LastJti, ct);
+
+        await _userRepo.DeleteSessionAsync(id, ct);
+
         bool isCurrent = false;
         if (!string.IsNullOrEmpty(currentRefreshToken))
         {
@@ -194,18 +214,10 @@ public class AuthController : ControllerBase
             isCurrent = current?.Id == id;
         }
 
-        await _userRepo.DeleteSessionAsync(id, ct);
-
         if (isCurrent)
             return NoContent();
 
-        await _userRepo.IncrementTokenVersionAsync(userId, ct);
-
-        var user = await _userRepo.GetByIdAsync(userId, ct);
-        if (user is null) return Unauthorized();
-
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
-        return Ok(new { token = accessToken });
+        return NoContent();
     }
 
     [Authorize]

@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<UserToken> UserTokens => Set<UserToken>();
     public DbSet<SpreadTick> SpreadTicks => Set<SpreadTick>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<BlacklistedJti> BlacklistedJtis => Set<BlacklistedJti>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -130,6 +131,17 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
             e.HasIndex(x => x.TokenHash).IsUnique().HasDatabaseName("idx_refresh_tokens_hash");
             e.HasIndex(x => x.UserId).HasDatabaseName("idx_refresh_tokens_user_id");
+        });
+
+        modelBuilder.Entity<BlacklistedJti>(e =>
+        {
+            e.ToTable("blacklisted_jtis");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.Jti).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.Jti).IsUnique().HasDatabaseName("idx_blacklisted_jtis_jti");
+            e.HasIndex(x => x.ExpiresAt).HasDatabaseName("idx_blacklisted_jtis_expires");
         });
     }
 }

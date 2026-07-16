@@ -23,6 +23,41 @@ namespace Onix.Scanner.Infrastructure.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "uuid-ossp");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Onix.Scanner.Shared.Models.BlacklistedJti", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("uuid_generate_v4()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Jti")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ExpiresAt")
+                        .HasDatabaseName("idx_blacklisted_jtis_expires");
+
+                    b.HasIndex("Jti")
+                        .IsUnique()
+                        .HasDatabaseName("idx_blacklisted_jtis_jti");
+
+                    b.ToTable("blacklisted_jtis", (string)null);
+                });
+
             modelBuilder.Entity("Onix.Scanner.Shared.Models.Proxy", b =>
                 {
                     b.Property<Guid>("Id")
@@ -106,6 +141,9 @@ namespace Onix.Scanner.Infrastructure.Migrations
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
+
+                    b.Property<string>("LastJti")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastUsedAt")
                         .HasColumnType("timestamp with time zone");
