@@ -12,8 +12,8 @@ using Onix.Scanner.Infrastructure.Data;
 namespace Onix.Scanner.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260716154953_AddTokenVersionAndRefreshTokens")]
-    partial class AddTokenVersionAndRefreshTokens
+    [Migration("20260716164557_AddMissingColumns")]
+    partial class AddMissingColumns
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
