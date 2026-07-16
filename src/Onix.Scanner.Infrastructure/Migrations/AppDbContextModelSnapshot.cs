@@ -351,6 +351,9 @@ namespace Onix.Scanner.Infrastructure.Migrations
                     b.Property<string>("DisplayName")
                         .HasColumnType("text");
 
+                    b.Property<bool>("Is2FAEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -369,6 +372,12 @@ namespace Onix.Scanner.Infrastructure.Migrations
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TwoFactorBackupCodes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TwoFactorSecret")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()

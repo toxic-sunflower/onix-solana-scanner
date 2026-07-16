@@ -79,6 +79,7 @@ builder.Services.AddNpgsqlDataSource(connectionString);
 builder.Services.AddSingleton<IEncryptionService>(
     new AesEncryptionService(encryptionKey));
 builder.Services.AddSingleton(new JwtTokenService(jwtKey));
+builder.Services.AddSingleton<TotpService>();
 
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
 builder.Services.AddScoped<ITokenRepository, TokenRepository>();

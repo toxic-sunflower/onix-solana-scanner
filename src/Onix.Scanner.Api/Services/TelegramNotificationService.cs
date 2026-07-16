@@ -1,8 +1,10 @@
+using System.Collections.Concurrent;
 using System.Threading.Channels;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Shared.Dtos;
 
 namespace Onix.Scanner.Api.Services;
@@ -14,7 +16,10 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly IServiceProvider _services;
     private readonly string? _botToken;
     private readonly string _appUrl;
-    private readonly Auth.JwtTokenService _jwt;
+    private readonly JwtTokenService _jwt;
+    private readonly TotpService _totp;
+
+    private readonly ConcurrentDictionary<long, BotState> _states = new();
 
     private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
 
@@ -26,12 +31,14 @@ public sealed class TelegramNotificationService : BackgroundService
         IConfiguration config,
         ILogger<TelegramNotificationService> logger,
         IServiceProvider services,
-        Auth.JwtTokenService jwt)
+        JwtTokenService jwt,
+        TotpService totp)
     {
         _logger = logger;
         _services = services;
         _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
         _jwt = jwt;
+        _totp = totp;
 
         var token = config["Telegram:BotToken"];
 
@@ -57,10 +64,12 @@ public sealed class TelegramNotificationService : BackgroundService
         if (_bot is null) return;
 
         var alertTask = ProcessAlertsAsync(stoppingToken);
-        var pollingTask = PollCommandsAsync(stoppingToken);
+        var pollingTask = PollUpdatesAsync(stoppingToken);
 
         await Task.WhenAny(alertTask, pollingTask);
     }
+
+    // ── Alert sending (unchanged) ──
 
     private async Task ProcessAlertsAsync(CancellationToken stoppingToken)
     {
@@ -97,7 +106,9 @@ public sealed class TelegramNotificationService : BackgroundService
         }
     }
 
-    private async Task PollCommandsAsync(CancellationToken ct)
+    // ── Polling with text + callback queries ──
+
+    private async Task PollUpdatesAsync(CancellationToken ct)
     {
         var http = new HttpClient();
 
@@ -106,7 +117,7 @@ public sealed class TelegramNotificationService : BackgroundService
             try
             {
                 var url = $"https://api.telegram.org/bot{_botToken}/getUpdates" +
-                          $"?offset={_lastUpdateId}&allowed_updates=[\"message\"]";
+                          $"?offset={_lastUpdateId}&allowed_updates=[\"message\",\"callback_query\"]";
                 var response = await http.GetStringAsync(url, ct);
                 using var doc = System.Text.Json.JsonDocument.Parse(response);
                 var result = doc.RootElement.GetProperty("result");
@@ -117,112 +128,11 @@ public sealed class TelegramNotificationService : BackgroundService
                 foreach (var update in updates)
                 {
                     _lastUpdateId = update.Id + 1;
-                    if (update.Message?.Text is null) continue;
 
-                    var text = update.Message.Text;
-                    var chatId = update.Message.Chat.Id;
-                    var fromId = update.Message.From?.Id;
-
-                    if (text.StartsWith("/start"))
-                    {
-                        var parts = text.Split(' ');
-                        var payload = parts.Length > 1 ? parts[1] : "";
-
-                        if (payload.StartsWith("auth_"))
-                        {
-                            if (fromId is null) continue;
-
-                            using var scope = _services.CreateScope();
-                            var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-
-                            var user = new Shared.Models.User
-                            {
-                                TelegramId = fromId.Value,
-                                TelegramUsername = update.Message.From!.Username,
-                                DisplayName = update.Message.From.FirstName,
-                                LastLoginAt = DateTime.UtcNow
-                            };
-                            user = await userRepo.CreateAsync(user, ct);
-
-                            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
-
-                            var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-                            var (refreshToken, hash) = _jwt.GenerateRefreshToken();
-                            await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
-                            {
-                                UserId = user.Id,
-                                TokenHash = hash,
-                                LastJti = jti,
-                                ExpiresAt = DateTime.UtcNow.AddDays(30),
-                            }, ct);
-
-                            await _bot.SendMessage(
-                                chatId: chatId,
-                                text: $"✅ Auth successful!\n\nOpen Mini App: {_appUrl}?token={authToken}&refresh={refreshToken}",
-                                cancellationToken: ct);
-                        }
-                        else
-                        {
-                            await _bot.SendMessage(
-                                chatId: chatId,
-                                text: "Welcome to ONIX Solana Scanner!\n\nGo to http://89.124.82.95 to log in.",
-                                cancellationToken: ct);
-                        }
-                    }
-                    else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
-                    {
-                        await _bot.SendMessage(
-                            chatId: chatId,
-                            text: "🟢 Scanner is running",
-                            cancellationToken: ct);
-                    }
-                    else if (text.Equals("/logout", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (fromId is null) continue;
-
-                        using var scope = _services.CreateScope();
-                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
-                        if (user is not null)
-                        {
-                            await userRepo.DeleteUserRefreshTokensAsync(user.Id, ct);
-                            await userRepo.IncrementTokenVersionAsync(user.Id, ct);
-                        }
-
-                        await _bot.SendMessage(
-                            chatId: chatId,
-                            text: "🔒 Logged out of all devices",
-                            cancellationToken: ct);
-                    }
-                    else if (text.Equals("/sessions", StringComparison.OrdinalIgnoreCase))
-                    {
-                        if (fromId is null) continue;
-
-                        using var scope = _services.CreateScope();
-                        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-                        var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
-                        if (user is null)
-                        {
-                            await _bot.SendMessage(chatId: chatId, text: "No account found. Use /start to create one.", cancellationToken: ct);
-                            continue;
-                        }
-
-                        var sessions = await userRepo.GetSessionsAsync(user.Id, ct);
-                        if (sessions.Count == 0)
-                        {
-                            await _bot.SendMessage(chatId: chatId, text: "No active sessions.", cancellationToken: ct);
-                            continue;
-                        }
-
-                        var msg = $"*{sessions.Count} active session(s):*\n\n" +
-                                  string.Join("\n", sessions.Select((s, i) =>
-                                      $"{i + 1}. {s.DisplayName}\n" +
-                                      $"   IP: {s.IpAddress ?? "N/A"}\n" +
-                                      $"   Last used: {s.LastUsedAt?.ToString("g") ?? "Never"}\n" +
-                                      $"   Created: {s.CreatedAt:g}"));
-
-                        await _bot.SendMessage(chatId: chatId, text: msg, parseMode: ParseMode.Markdown, cancellationToken: ct);
-                    }
+                    if (update.CallbackQuery is not null)
+                        await HandleCallbackQuery(update.CallbackQuery, ct);
+                    else if (update.Message?.Text is not null)
+                        await HandleMessage(update.Message, ct);
                 }
             }
             catch (Exception ex)
@@ -233,6 +143,386 @@ public sealed class TelegramNotificationService : BackgroundService
             await Task.Delay(2000, ct);
         }
     }
+
+    // ── Message handler ──
+
+    private async Task HandleMessage(Message msg, CancellationToken ct)
+    {
+        var text = msg.Text!;
+        var chatId = msg.Chat.Id;
+        var fromId = msg.From?.Id;
+        if (fromId is null) return;
+
+        // Check for active OTP challenge
+        if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
+        {
+            if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
+                text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
+            {
+                _totp.ClearChallenge(chatId);
+                _states.TryRemove(chatId, out _);
+                await ShowMainMenu(chatId, ct, "Cancelled.");
+                return;
+            }
+
+            await HandleOtpInput(chatId, fromId.Value, text, state, ct);
+            return;
+        }
+
+        if (text.StartsWith("/start"))
+        {
+            var parts = text.Split(' ');
+            var payload = parts.Length > 1 ? parts[1] : "";
+            await HandleStart(chatId, fromId.Value, msg.From!, payload, ct);
+        }
+        else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
+        {
+            await _bot!.SendMessage(chatId: chatId, text: "🟢 Scanner is running", cancellationToken: ct);
+        }
+        else
+        {
+            // Unknown command → show main menu if registered
+            using var scope = _services.CreateScope();
+            var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+            var user = await userRepo.GetByTelegramIdAsync(fromId.Value, ct);
+            if (user is not null)
+                await ShowMainMenu(chatId, ct);
+            else
+                await _bot!.SendMessage(chatId: chatId, text: "Unknown command. Send /start", cancellationToken: ct);
+        }
+    }
+
+    // ── Callback query handler ──
+
+    private async Task HandleCallbackQuery(CallbackQuery query, CancellationToken ct)
+    {
+        var chatId = query.Message?.Chat.Id;
+        var fromId = query.From.Id;
+        if (chatId is null) return;
+
+        try
+        {
+            await _bot!.AnswerCallbackQuery(query.Id, cancellationToken: ct);
+        }
+        catch { /* ignore */ }
+
+        switch (query.Data)
+        {
+            case "register":
+                await StartRegistration(chatId.Value, fromId, ct);
+                break;
+            case "confirm_registration":
+                await CompleteRegistration(chatId.Value, fromId, ct);
+                break;
+            case "get_link":
+                await PromptOtpForLink(chatId.Value, fromId, ct);
+                break;
+            case "cancel_otp":
+                _totp.ClearChallenge(chatId.Value);
+                _states.TryRemove(chatId.Value, out _);
+                await ShowMainMenu(chatId.Value, ct, "Cancelled.");
+                break;
+            case "main_menu":
+                _states.TryRemove(chatId.Value, out _);
+                await ShowMainMenu(chatId.Value, ct);
+                break;
+        }
+    }
+
+    // ── /start handler ──
+
+    private async Task HandleStart(long chatId, long fromId, User tgUser, string payload, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+        var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
+
+        if (payload.StartsWith("auth_"))
+        {
+            if (user is null)
+            {
+                // Create user first
+                user = new Shared.Models.User
+                {
+                    TelegramId = fromId,
+                    TelegramUsername = tgUser.Username,
+                    DisplayName = tgUser.FirstName,
+                    LastLoginAt = DateTime.UtcNow,
+                    Is2FAEnabled = false,
+                };
+                user = await userRepo.CreateAsync(user, ct);
+                await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+            }
+
+            if (!user.Is2FAEnabled)
+            {
+                // Need to set up 2FA first
+                await ShowRegistrationRequired(chatId, ct);
+                return;
+            }
+
+            // Challenge OTP
+            _totp.StartChallenge(chatId, user.Id, "auth");
+            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
+            await _bot!.SendMessage(
+                chatId: chatId,
+                text: "Enter your 2FA code to log in.\n\nType the code or send *cancel* to abort.",
+                parseMode: ParseMode.Markdown,
+                replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Cancel", "cancel_otp")),
+                cancellationToken: ct);
+            return;
+        }
+
+        if (user is null)
+        {
+            // Welcome screen for new users
+            var welcome = $"🧬 *ONIX Solana Scanner*\n\n" +
+                          "Real-time arbitrage scanner between BingX Futures and Jupiter DEX.\n\n" +
+                          "• Track spreads in real time\n" +
+                          "• Get Telegram alerts\n" +
+                          "• Manage your watchlist\n\n" +
+                          "Tap *Register* to get started.";
+            await _bot!.SendMessage(
+                chatId: chatId,
+                text: welcome,
+                parseMode: ParseMode.Markdown,
+                replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Register", "register")),
+                cancellationToken: ct);
+        }
+        else
+        {
+            await ShowMainMenu(chatId, ct);
+        }
+    }
+
+    // ── Registration flow ──
+
+    private async Task StartRegistration(long chatId, long fromId, CancellationToken ct)
+    {
+        var secret = _totp.GenerateSecret();
+        var qrUri = _totp.GenerateQrUri(secret, fromId.ToString());
+        var backupCodes = _totp.GenerateBackupCodes(8);
+
+        _states[chatId] = new BotState
+        {
+            State = BotStep.Registration,
+            UserId = Guid.Empty,
+            RegistrationSecret = secret,
+            RegistrationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
+        };
+
+        var msg = $"*Step 1:* Set up two-factor authentication\n\n" +
+                  $"Open your authenticator app and add a new account:\n" +
+                  $"- Scan: `{qrUri}`\n\n" +
+                  $"Or enter this secret manually: `{secret}`\n\n" +
+                  $"*Backup codes (save these!):*\n" +
+                  string.Join("\n", backupCodes.Select((c, i) => $"`{c.plain}`")) +
+                  "\n\nEach backup code can be used once if you lose access to your authenticator.";
+
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: msg,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup(
+                InlineKeyboardButton.WithCallbackData("I've saved the codes — Register", "confirm_registration")),
+            cancellationToken: ct);
+    }
+
+    private async Task CompleteRegistration(long chatId, long fromId, CancellationToken ct)
+    {
+        if (!_states.TryGetValue(chatId, out var state) || state.State != BotStep.Registration)
+        {
+            await ShowMainMenu(chatId, ct, "Registration expired. Try again.");
+            return;
+        }
+
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+
+        var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
+        if (user is null)
+        {
+            // First time — create user
+            user = new Shared.Models.User
+            {
+                TelegramId = fromId,
+                DisplayName = fromId.ToString(),
+                LastLoginAt = DateTime.UtcNow,
+                Is2FAEnabled = true,
+                TwoFactorSecret = state.RegistrationSecret,
+                TwoFactorBackupCodes = state.RegistrationBackupHashes,
+            };
+            user = await userRepo.CreateAsync(user, ct);
+        }
+        else
+        {
+            user.Is2FAEnabled = true;
+            user.TwoFactorSecret = state.RegistrationSecret;
+            user.TwoFactorBackupCodes = state.RegistrationBackupHashes;
+            await userRepo.UpdateAsync(user, ct);
+        }
+
+        await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+
+        _states.TryRemove(chatId, out _);
+
+        // Create login link immediately after registration
+        var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = hash,
+            LastJti = jti,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
+
+        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}";
+
+        var msg = $"✅ Registration complete!\n\n" +
+                  $"Your login link:\n{link}\n\n" +
+                  "This link expires in 30 days. You can always get a new one from the menu.";
+        await _bot!.SendMessage(chatId: chatId, text: msg, cancellationToken: ct);
+        await ShowMainMenu(chatId, ct);
+    }
+
+    // ── OTP challenge for login link ──
+
+    private async Task PromptOtpForLink(long chatId, long fromId, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+        var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
+
+        if (user is null)
+        {
+            await ShowRegistrationRequired(chatId, ct);
+            return;
+        }
+
+        if (!user.Is2FAEnabled)
+        {
+            // Start registration flow for 2FA setup
+            await StartRegistration(chatId, fromId, ct);
+            return;
+        }
+
+        var result = _totp.StartChallenge(chatId, user.Id, "link");
+        if (result.Blocked)
+        {
+            await _bot!.SendMessage(chatId: chatId,
+                text: "Too many attempts. Try again in 5 minutes.",
+                cancellationToken: ct);
+            return;
+        }
+
+        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: "Enter your 2FA code to get the login link.\n\nType the code or send *cancel* to abort.",
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Cancel", "cancel_otp")),
+            cancellationToken: ct);
+    }
+
+    private async Task HandleOtpInput(long chatId, long fromId, string otp, BotState state, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+        var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
+        if (user is null)
+        {
+            await ShowMainMenu(chatId, ct, "User not found.");
+            return;
+        }
+
+        var result = _totp.TryValidateOtp(chatId, otp, user.TwoFactorSecret, user.TwoFactorBackupCodes);
+
+        if (result.Expired)
+        {
+            _states.TryRemove(chatId, out _);
+            await _bot!.SendMessage(chatId: chatId, text: "Code expired. Request a new one.", cancellationToken: ct);
+            return;
+        }
+
+        if (result.Blocked)
+        {
+            await _bot!.SendMessage(chatId: chatId,
+                text: "Too many failed attempts. Try again in 5 minutes.", cancellationToken: ct);
+            return;
+        }
+
+        if (!result.Validated)
+        {
+            var remaining = result.RemainingAttempts;
+            await _bot!.SendMessage(chatId: chatId,
+                text: $"Invalid code. {remaining} attempt(s) remaining.\n\nType *cancel* to abort.",
+                parseMode: ParseMode.Markdown,
+                cancellationToken: ct);
+            return;
+        }
+
+        // Success — generate link
+        if (result.UsedBackup && result.MatchedHash is not null)
+        {
+            user.TwoFactorBackupCodes = _totp.RemoveUsedBackupCode(user.TwoFactorBackupCodes ?? "", result.MatchedHash);
+            await userRepo.UpdateAsync(user, ct);
+        }
+
+        var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = hash,
+            LastJti = jti,
+            DeviceName = "Telegram Bot",
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
+
+        _states.TryRemove(chatId, out _);
+
+        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}";
+
+        var linkMsg = result.UsedBackup
+            ? $"✅ Login link:\n{link}\n\n⚠️ You used a backup code. Go to Settings on the website to set up a new authenticator."
+            : $"✅ Login link:\n{link}\n\nThis link expires in 30 days.";
+
+        await _bot!.SendMessage(chatId: chatId,
+            text: linkMsg,
+            cancellationToken: ct);
+        await ShowMainMenu(chatId, ct);
+    }
+
+    // ── Helpers ──
+
+    private async Task ShowMainMenu(long chatId, CancellationToken ct, string? preface = null)
+    {
+        if (preface is not null)
+            await _bot!.SendMessage(chatId: chatId, text: preface, cancellationToken: ct);
+
+        var keyboard = new InlineKeyboardMarkup([
+            [InlineKeyboardButton.WithCallbackData("Get login link", "get_link")],
+        ]);
+
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: "📱 Main menu",
+            replyMarkup: keyboard,
+            cancellationToken: ct);
+    }
+
+    private async Task ShowRegistrationRequired(long chatId, CancellationToken ct)
+    {
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: "You need to set up two-factor authentication first.\n\nTap *Register* to begin.",
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Register", "register")),
+            cancellationToken: ct);
+    }
+
+    // ── Signal sending (unchanged) ──
 
     private async Task SendSignalAsync(long chatId, TokenCardDto dto, CancellationToken ct)
     {
@@ -262,4 +552,17 @@ public sealed class TelegramNotificationService : BackgroundService
         _logger.LogInformation("Telegram signal sent: chat_id={ChatId} message_id={MessageId} symbol={Symbol} spread={Spread:F2}%",
             chatId, sent.MessageId, dto.Symbol, dto.SpreadPct);
     }
+}
+
+// ── Bot state ──
+
+enum BotStep { None, Registration, AwaitingOtp }
+
+class BotState
+{
+    public BotStep State { get; set; }
+    public Guid UserId { get; set; }
+    public string Purpose { get; set; } = "";
+    public string? RegistrationSecret { get; set; }
+    public string? RegistrationBackupHashes { get; set; }
 }

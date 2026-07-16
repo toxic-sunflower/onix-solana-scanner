@@ -23,6 +23,12 @@ public class UserRepository : IUserRepository
         return user;
     }
 
+    public async Task UpdateAsync(User user, CancellationToken ct = default)
+    {
+        _db.Users.Update(user);
+        await _db.SaveChangesAsync(ct);
+    }
+
     public async Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default)
     {
         await _db.Users.Where(u => u.Id == userId)

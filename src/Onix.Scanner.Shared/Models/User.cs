@@ -11,6 +11,9 @@ public class User
     public DateTime? AuthTokenExpiresAt { get; set; }
     public UserRole Role { get; set; }
     public int TokenVersion { get; set; }
+    public bool Is2FAEnabled { get; set; }
+    public string? TwoFactorSecret { get; set; }
+    public string? TwoFactorBackupCodes { get; set; }
     public long? ChatId { get; set; }
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }

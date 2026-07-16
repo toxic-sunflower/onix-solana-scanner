@@ -12,7 +12,7 @@ using Onix.Scanner.Infrastructure.Data;
 namespace Onix.Scanner.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260716153523_AddTokenVersionAndRefreshTokens")]
+    [Migration("20260716154953_AddTokenVersionAndRefreshTokens")]
     partial class AddTokenVersionAndRefreshTokens
     {
         /// <inheritdoc />
@@ -354,6 +354,9 @@ namespace Onix.Scanner.Infrastructure.Migrations
                     b.Property<string>("DisplayName")
                         .HasColumnType("text");
 
+                    b.Property<bool>("Is2FAEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -372,6 +375,12 @@ namespace Onix.Scanner.Infrastructure.Migrations
 
                     b.Property<int>("TokenVersion")
                         .HasColumnType("integer");
+
+                    b.Property<string>("TwoFactorBackupCodes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TwoFactorSecret")
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .ValueGeneratedOnAdd()
