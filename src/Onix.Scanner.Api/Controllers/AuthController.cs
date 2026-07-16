@@ -131,11 +131,40 @@ public class AuthController : ControllerBase
     }
 
     [Authorize]
+    [HttpPost("revoke-others")]
+    public async Task<ActionResult> RevokeOthers([FromBody] RefreshRequest request, CancellationToken ct)
+    {
+        var hash = JwtTokenService.HashRefreshToken(request.RefreshToken);
+        var current = await _userRepo.GetRefreshTokenAsync(hash, ct);
+        if (current is null)
+            return Unauthorized(new { error = "invalid_refresh_token" });
+
+        var userId = User.GetUserId();
+        await _userRepo.DeleteOtherSessionsAsync(userId, current.Id, ct);
+        await _userRepo.IncrementTokenVersionAsync(userId, ct);
+
+        var user = await _userRepo.GetByIdAsync(userId, ct);
+        if (user is null) return Unauthorized();
+
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+        return Ok(new { token = accessToken });
+    }
+
+    [Authorize]
     [HttpGet("sessions")]
-    public async Task<ActionResult> GetSessions(CancellationToken ct)
+    public async Task<ActionResult> GetSessions([FromQuery] string? currentRefreshToken, CancellationToken ct)
     {
         var userId = User.GetUserId();
         var sessions = await _userRepo.GetSessionsAsync(userId, ct);
+
+        Guid? currentId = null;
+        if (!string.IsNullOrEmpty(currentRefreshToken))
+        {
+            var hash = JwtTokenService.HashRefreshToken(currentRefreshToken);
+            var current = await _userRepo.GetRefreshTokenAsync(hash, ct);
+            currentId = current?.Id;
+        }
+
         return Ok(sessions.Select(s => new
         {
             id = s.Id,
@@ -144,21 +173,39 @@ public class AuthController : ControllerBase
             lastUsedAt = s.LastUsedAt ?? s.CreatedAt,
             createdAt = s.CreatedAt,
             expiresAt = s.ExpiresAt,
-            isCurrent = false
+            isCurrent = s.Id == currentId
         }));
     }
 
     [Authorize]
     [HttpDelete("sessions/{id:guid}")]
-    public async Task<ActionResult> DeleteSession(Guid id, CancellationToken ct)
+    public async Task<ActionResult> DeleteSession(Guid id, [FromQuery] string? currentRefreshToken, CancellationToken ct)
     {
         var userId = User.GetUserId();
         var session = await _userRepo.GetSessionByIdAsync(id, userId, ct);
         if (session is null)
             return NotFound();
 
+        bool isCurrent = false;
+        if (!string.IsNullOrEmpty(currentRefreshToken))
+        {
+            var hash = JwtTokenService.HashRefreshToken(currentRefreshToken);
+            var current = await _userRepo.GetRefreshTokenAsync(hash, ct);
+            isCurrent = current?.Id == id;
+        }
+
         await _userRepo.DeleteSessionAsync(id, ct);
-        return NoContent();
+
+        if (isCurrent)
+            return NoContent();
+
+        await _userRepo.IncrementTokenVersionAsync(userId, ct);
+
+        var user = await _userRepo.GetByIdAsync(userId, ct);
+        if (user is null) return Unauthorized();
+
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion);
+        return Ok(new { token = accessToken });
     }
 
     [Authorize]

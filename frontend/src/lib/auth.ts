@@ -55,13 +55,42 @@ export async function logoutAll() {
   }
 }
 
-export async function getSessions(): Promise<{ id: string; deviceName: string; lastUsedAt: string }[]> {
-  const res = await authFetch('/api/v1/auth/sessions');
+export async function getSessions(): Promise<Session[]> {
+  const refresh = localStorage.getItem('refresh_token');
+  const res = await authFetch(`/api/v1/auth/sessions?currentRefreshToken=${encodeURIComponent(refresh ?? '')}`);
   if (res.ok) return res.json();
   return [];
 }
 
 export async function revokeSession(sessionId: string): Promise<boolean> {
-  const res = await authFetch(`/api/v1/auth/sessions/${sessionId}`, { method: 'DELETE' });
-  return res.ok;
+  const refresh = localStorage.getItem('refresh_token');
+  const res = await authFetch(`/api/v1/auth/sessions/${sessionId}?currentRefreshToken=${encodeURIComponent(refresh ?? '')}`, { method: 'DELETE' });
+  if (res.ok) {
+    const data = await res.json().catch(() => null);
+    if (data?.token) localStorage.setItem('auth_token', data.token);
+    return true;
+  }
+  return false;
+}
+
+export async function revokeOthers(): Promise<boolean> {
+  const refresh = localStorage.getItem('refresh_token');
+  const res = await authFetch('/api/v1/auth/revoke-others', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refreshToken: refresh }),
+  });
+  if (res.ok) {
+    const data = await res.json();
+    if (data?.token) localStorage.setItem('auth_token', data.token);
+    return true;
+  }
+  return false;
+}
+
+interface Session {
+  id: string;
+  deviceName: string;
+  lastUsedAt: string;
+  isCurrent: boolean;
 }

@@ -87,6 +87,11 @@ public class UserRepository : IUserRepository
                 .SetProperty(r => r.IpAddress, ip), ct);
     }
 
+    public async Task DeleteOtherSessionsAsync(Guid userId, Guid keepTokenId, CancellationToken ct = default)
+    {
+        await _db.RefreshTokens.Where(r => r.UserId == userId && r.Id != keepTokenId).ExecuteDeleteAsync(ct);
+    }
+
     public async Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default)
     {
         return await (from u in _db.Users

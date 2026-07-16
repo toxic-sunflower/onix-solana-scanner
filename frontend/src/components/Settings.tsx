@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { authFetch, logoutAll, getSessions, revokeSession } from '../lib/auth';
+import { authFetch, logoutAll, getSessions, revokeSession, revokeOthers } from '../lib/auth';
 
 interface UserSettings {
   minimalSpreadPct: number;
@@ -12,6 +12,7 @@ interface Session {
   id: string;
   deviceName: string;
   lastUsedAt: string;
+  isCurrent: boolean;
 }
 
 export default function Settings({ onBack }: { onBack: () => void }) {
@@ -42,6 +43,11 @@ export default function Settings({ onBack }: { onBack: () => void }) {
   const handleRevokeSession = async (id: string) => {
     const ok = await revokeSession(id);
     if (ok) setSessions(s => s.filter(x => x.id !== id));
+  };
+
+  const handleRevokeOthers = async () => {
+    const ok = await revokeOthers();
+    if (ok) setSessions(s => s.filter(x => !x.isCurrent));
   };
 
   return (
@@ -81,22 +87,30 @@ export default function Settings({ onBack }: { onBack: () => void }) {
           {sessions.map(s => (
             <div key={s.id} className="flex items-center justify-between bg-gray-800 px-3 py-2 rounded">
               <div className="flex flex-col">
-                <span className="text-sm">{s.deviceName}</span>
+                <span className="text-sm">{s.deviceName} {s.isCurrent && <span className="text-green-400 text-xs">(current)</span>}</span>
                 <span className="text-xs text-gray-500">Last used: {new Date(s.lastUsedAt).toLocaleString()}</span>
               </div>
-              <button onClick={() => handleRevokeSession(s.id)}
-                className="px-2 py-1 text-xs bg-red-900 hover:bg-red-800 rounded">
-                Logout
-              </button>
+              {!s.isCurrent && (
+                <button onClick={() => handleRevokeSession(s.id)}
+                  className="px-2 py-1 text-xs bg-red-900 hover:bg-red-800 rounded">
+                  Logout
+                </button>
+              )}
             </div>
           ))}
         </div>
 
         {sessions.length > 0 && (
-          <button onClick={logoutAll}
-            className="px-4 py-2 bg-red-800 hover:bg-red-700 rounded text-sm self-start">
-            Logout all devices
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={handleRevokeOthers}
+              className="px-4 py-2 bg-orange-800 hover:bg-orange-700 rounded text-sm">
+              Logout other devices
+            </button>
+            <button onClick={logoutAll}
+              className="px-4 py-2 bg-red-800 hover:bg-red-700 rounded text-sm">
+              Logout all devices
+            </button>
+          </div>
         )}
       </div>
     </div>

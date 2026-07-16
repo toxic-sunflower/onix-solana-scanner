@@ -17,6 +17,7 @@ public interface IUserRepository
     Task<List<RefreshToken>> GetSessionsAsync(Guid userId, CancellationToken ct = default);
     Task<RefreshToken?> GetSessionByIdAsync(Guid sessionId, Guid userId, CancellationToken ct = default);
     Task DeleteSessionAsync(Guid sessionId, CancellationToken ct = default);
+    Task DeleteOtherSessionsAsync(Guid userId, Guid keepTokenId, CancellationToken ct = default);
     Task UpdateRefreshTokenLastUsedAsync(Guid tokenId, string? ip, CancellationToken ct = default);
     Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default);
 }
