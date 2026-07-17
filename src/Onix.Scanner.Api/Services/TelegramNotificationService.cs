@@ -439,7 +439,8 @@ public sealed class TelegramNotificationService : BackgroundService
             ExpiresAt = DateTime.UtcNow.AddDays(30),
         }, ct);
 
-        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}";
+        var linkLang = _loc.GetLanguage(chatId);
+        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}&lang={linkLang}";
 
         await _bot!.SendMessage(chatId: chatId,
             text: _loc.Get(chatId, "login_link", ("link", link)),
@@ -590,7 +591,8 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _states.TryRemove(chatId, out _);
 
-        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}";
+        var linkLang = _loc.GetLanguage(chatId);
+        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}&lang={linkLang}";
 
         var linkKey = result.UsedBackup ? "login_link_backup" : "login_link";
         await _bot!.SendMessage(chatId: chatId,
