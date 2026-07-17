@@ -281,6 +281,7 @@ public sealed class TelegramNotificationService : BackgroundService
         switch (data)
         {
             case "register":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
                 await StartRegistration(chatId.Value, fromId, ct);
                 break;
             case "confirm_registration":
