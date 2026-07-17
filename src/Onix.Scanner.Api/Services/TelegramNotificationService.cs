@@ -182,6 +182,7 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             var parts = text.Split(' ');
             var payload = parts.Length > 1 ? parts[1] : "";
+            DetectInitialLanguage(chatId, msg.From?.LanguageCode);
             await HandleStart(chatId, fromId.Value, msg.From!, payload, ct);
         }
         else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
@@ -207,6 +208,8 @@ public sealed class TelegramNotificationService : BackgroundService
         var chatId = query.Message?.Chat.Id;
         var fromId = query.From.Id;
         if (chatId is null) return;
+
+        DetectInitialLanguage(chatId.Value, query.From.LanguageCode);
 
         try
         {
@@ -594,6 +597,17 @@ public sealed class TelegramNotificationService : BackgroundService
             text: _loc.Get(chatId, linkKey, ("link", link)),
             cancellationToken: ct);
         await ShowMainMenu(chatId, ct);
+    }
+
+    // ── Language detection ──
+
+    private void DetectInitialLanguage(long chatId, string? telegramLang)
+    {
+        if (telegramLang is null) return;
+        if (_loc.GetLanguage(chatId) != "en") return; // already set
+        var supported = _loc.AvailableLanguages.Select(l => l.Code).ToHashSet();
+        if (supported.Contains(telegramLang))
+            _loc.SetLanguage(chatId, telegramLang);
     }
 
     // ── Helpers ──
