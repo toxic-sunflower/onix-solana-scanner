@@ -32,7 +32,7 @@ public sealed class LocalizationService
 
     public string Get(long chatId, string key, params (string Name, string Value)[] args)
     {
-        var lang = _userLang.GetValueOrDefault(chatId, "ru");
+        var lang = _userLang.GetValueOrDefault(chatId, "en");
         return Get(lang, key, args);
     }
 
@@ -56,8 +56,14 @@ public sealed class LocalizationService
             _userLang[chatId] = lang;
     }
 
-    public string GetLanguage(long chatId) => _userLang.GetValueOrDefault(chatId, "ru");
+    public string GetLanguage(long chatId) => _userLang.GetValueOrDefault(chatId, "en");
 
     public IEnumerable<(string Code, string Label)> AvailableLanguages =>
         _locales.Select(kv => (kv.Key, kv.Value.GetValueOrDefault("language", kv.Key)));
+
+    public IEnumerable<(string Code, string Label)> GetOtherLanguages(long chatId)
+    {
+        var current = GetLanguage(chatId);
+        return AvailableLanguages.Where(l => l.Code != current);
+    }
 }

@@ -1,0 +1,38 @@
+{
+  "language": "🇩🇪 Deutsch",
+  "lang_code": "de",
+
+  "welcome": "🧬 *ONIX Solana Scanner*\n\nEchtzeit-Arbitrage-Scanner zwischen BingX Futures und Jupiter DEX.\n\n• Spreads in Echtzeit verfolgen\n• Telegram-Benachrichtigungen erhalten\n• Watchlist verwalten\n\nSprache auswählen:",
+  "register_btn": "Registrieren",
+  "main_menu": "📱 Hauptmenü",
+  "get_login_link": "Login-Link erhalten",
+  "login_link": "✅ Login-Link:\n{link}\n\nDieser Link läuft in 30 Tagen ab.",
+  "login_link_backup": "✅ Login-Link:\n{link}\n\n⚠️ Du hast einen Backup-Code verwendet. Gehe zu den Einstellungen auf der Website, um einen neuen Authenticator einzurichten.",
+  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.",
+  "backup_codes_title": "*Backup-Codes (speichere diese!):*",
+  "reset_code_label": "*Reset-Code:* `{code}`",
+  "reset_code_hint": "Wenn du den Zugriff auf deinen Authenticator UND die Backup-Codes verlierst, verwende diesen Code, um 2FA zurückzusetzen.",
+  "register_codes_btn": "Codes gespeichert — Registrieren",
+  "enter_otp": "Gib deinen 2FA-Code ein, um dich anzumelden.\n\nSende den Code oder *abbrechen* zum Abbrechen.",
+  "enter_otp_for_link": "Gib deinen 2FA-Code ein, um einen Login-Link zu erhalten.\n\nSende den Code oder *abbrechen* zum Abbrechen.",
+  "cancel": "Abbrechen",
+  "cancel_cmd": "Abgebrochen.",
+  "code_expired": "Code abgelaufen. Fordere einen neuen an.",
+  "too_many_attempts": "Zu viele Fehlversuche. Versuche es in 5 Minuten erneut.",
+  "invalid_code": "Ungültiger Code. Noch {remaining} Versuch(e).\n\nSende *abbrechen* zum Abbrechen.",
+  "unknown_command": "Unbekannter Befehl. Sende /start",
+  "bot_running": "🟢 Scanner läuft",
+  "user_not_found": "Benutzer nicht gefunden.",
+  "2fa_reset": "✅ 2FA wurde zurückgesetzt. Du kannst dich jetzt ohne Code anmelden.\n\nRichte in den Einstellungen auf der Website einen neuen Authenticator ein, um 2FA wieder zu aktivieren.",
+  "registration_required": "Du musst zuerst die Zwei-Faktor-Authentifizierung einrichten.\n\nTippe auf *Registrieren* um zu beginnen.",
+  "registration_expired": "Registrierung abgelaufen. Versuche es erneut.",
+
+  "signal_title": "🚨 {symbol}  {spread}% (Solana)",
+  "signal_profit": "💰 Gewinn: {spread}%",
+  "signal_bingx": "💵 BINGX: ${price}",
+  "signal_jupiter": "💵 Jupiter: ${price}",
+  "signal_contract": "📋 Vertrag: {id}",
+
+  "scan_qr": "Scanne diesen QR-Code in deiner Authenticator-App und sende dann den 6-stelligen Code.",
+  "setup_2fa_step1": "*Schritt 1:* Zwei-Faktor-Authentifizierung einrichten\n\nÖffne deine Authenticator-App und füge ein neues Konto hinzu:\n- Scanne den QR-Code oben\n\nOder gib das Secret manuell ein: `{secret}`"
+}

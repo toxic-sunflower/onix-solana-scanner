@@ -231,16 +231,32 @@ public sealed class TelegramNotificationService : BackgroundService
                 await langUserRepo.UpdateAsync(langUser, ct);
             }
 
+            var otherLangBtns = _loc.GetOtherLanguages(chatId.Value)
+                .Select(l => InlineKeyboardButton.WithCallbackData(l.Label, $"lang_{l.Code}"))
+                .ToArray();
+
             if (langUser is not null)
-                await ShowMainMenu(chatId.Value, ct);
-            else
-                await _bot!.SendMessage(
+            {
+                await _bot!.EditMessageText(
                     chatId: chatId.Value,
+                    messageId: query.Message!.MessageId,
+                    text: _loc.Get(lang, "main_menu"),
+                    parseMode: ParseMode.Markdown,
+                    replyMarkup: new InlineKeyboardMarkup([
+                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "get_login_link"), "get_link")],
+                    ]),
+                    cancellationToken: ct);
+            }
+            else
+            {
+                await _bot!.EditMessageText(
+                    chatId: chatId.Value,
+                    messageId: query.Message!.MessageId,
                     text: _loc.Get(lang, "welcome"),
                     parseMode: ParseMode.Markdown,
-                    replyMarkup: new InlineKeyboardMarkup(
-                        InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_btn"), "register")),
+                    replyMarkup: new InlineKeyboardMarkup([[.. otherLangBtns]]),
                     cancellationToken: ct);
+            }
             return;
         }
 
@@ -313,12 +329,13 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (user is null)
         {
-            var langBtns = _loc.AvailableLanguages
+            var currentLang = _loc.GetLanguage(chatId);
+            var langBtns = _loc.GetOtherLanguages(chatId)
                 .Select(l => InlineKeyboardButton.WithCallbackData(l.Label, $"lang_{l.Code}"))
                 .ToArray();
             await _bot!.SendMessage(
                 chatId: chatId,
-                text: _loc.Get(_loc.GetLanguage(chatId), "welcome"),
+                text: _loc.Get(currentLang, "welcome"),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup(langBtns),
                 cancellationToken: ct);
