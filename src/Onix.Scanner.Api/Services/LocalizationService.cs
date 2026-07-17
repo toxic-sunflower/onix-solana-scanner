@@ -21,7 +21,7 @@ public sealed class LocalizationService
             foreach (var file in Directory.GetFiles(dir, "*.json"))
             {
                 var json = File.ReadAllText(file);
-                var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
+                var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(json, new JsonSerializerOptions { AllowTrailingCommas = true });
                 if (dict is null) continue;
                 var code = dict.GetValueOrDefault("lang_code", "en");
                 _locales[code] = dict;

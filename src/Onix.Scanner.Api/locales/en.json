@@ -32,5 +32,5 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contract: {id}",
 
-  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
+  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm."
 }
