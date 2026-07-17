@@ -32,7 +32,5 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Vertrag: {id}",
 
-  "setup_intro": "Um dein Konto vor unbefugtem Zugriff zu schützen, verwenden wir die Zwei-Faktor-Authentifizierung.\n\nFüge dieses Konto in deiner Authenticator-App hinzu und gib den 6-stelligen Code zur Bestätigung ein.\n\nBeliebte Authenticator-Apps:",
-  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.\n\nOder gib das Secret manuell ein: `{secret}`",
-  "app_qr_caption": "*{name}*\n\nScan den QR-Code mit deinem Handy oder öffne den Link unten:"
+  "setup_intro": "Um dein Konto vor unbefugtem Zugriff zu schützen, verwenden wir die Zwei-Faktor-Authentifizierung.\n\nFüge dieses Konto in deiner Authenticator-App hinzu und gib den 6-stelligen Code zur Bestätigung ein."
 }

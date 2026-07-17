@@ -32,7 +32,5 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contract: {id}",
 
-  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.\n\nPopular authenticator apps:",
-  "qr_caption": "Scan this QR code in your authenticator app, then send me the 6-digit code.\n\nOr enter this secret manually: `{secret}`",
-  "app_qr_caption": "*{name}*\n\nScan the QR code with your phone, or open the link below:"
+  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
 }
