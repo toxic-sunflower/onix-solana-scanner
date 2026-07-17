@@ -32,5 +32,7 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contrat: {id}",
 
-  "setup_intro": "Pour protéger votre compte contre les accès non autorisés, nous utilisons l'authentification à deux facteurs.\n\nAjoutez ce compte à votre application d'authentification et saisissez le code à 6 chiffres pour confirmer."
+  "setup_intro": "Pour protéger votre compte contre les accès non autorisés, nous utilisons l'authentification à deux facteurs.\n\nAjoutez ce compte à votre application d'authentification et saisissez le code à 6 chiffres pour confirmer.",
+  "manual_secret": "Ou saisissez ce secret manuellement : `{secret}`",
+  "popular_apps": "— Applications d'authentification populaires :"
 }

@@ -400,17 +400,17 @@ public sealed class TelegramNotificationService : BackgroundService
         await ms.WriteAsync(pngBytes, ct);
         ms.Position = 0;
 
+        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}";
         await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
-            caption: _loc.Get(chatId, "setup_intro"),
+            caption: caption,
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup([
                 [InlineKeyboardButton.WithUrl("Google Authenticator", "https://support.google.com/accounts/answer/1066447")],
                 [InlineKeyboardButton.WithUrl("Authy", "https://authy.com")],
                 [InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://www.microsoft.com/en-us/security/mobile-authenticator-app")],
                 [InlineKeyboardButton.WithUrl("2FAS", "https://2fas.com")],
-                [InlineKeyboardButton.WithCallbackData("Cancel", "cancel_otp")],
             ]),
             cancellationToken: ct);
     }
