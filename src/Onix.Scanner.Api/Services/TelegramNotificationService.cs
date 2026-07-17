@@ -162,6 +162,9 @@ public sealed class TelegramNotificationService : BackgroundService
         var fromId = msg.From?.Id;
         if (fromId is null) return;
 
+        if (text.StartsWith("/start"))
+            try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
+
         // Check for active OTP challenge
         if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
@@ -289,6 +292,11 @@ public sealed class TelegramNotificationService : BackgroundService
             case "get_link":
                 await PromptOtpForLink(chatId.Value, fromId, ct);
                 break;
+            case "cancel_registration":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                _states.TryRemove(chatId.Value, out _);
+                await ShowMainMenu(chatId.Value, ct);
+                break;
             case "cancel_otp":
                 _totp.ClearChallenge(chatId.Value);
                 _states.TryRemove(chatId.Value, out _);
@@ -368,15 +376,12 @@ public sealed class TelegramNotificationService : BackgroundService
                 parseMode: ParseMode.Markdown,
                 replyMarkup: keyboard,
                 cancellationToken: ct);
-
-            try { await _bot!.DeleteMessage(chatId, userMsgId, ct); } catch { }
         }
         else
         {
             if (user.Language is not null)
                 _loc.SetLanguage(chatId, user.Language);
             await ShowMainMenu(chatId, ct);
-            try { await _bot!.DeleteMessage(chatId, userMsgId, ct); } catch { }
         }
     }
 
@@ -614,8 +619,10 @@ public sealed class TelegramNotificationService : BackgroundService
                 chatId: chatId,
                 text: codesMsg,
                 parseMode: ParseMode.Markdown,
-                replyMarkup: new InlineKeyboardMarkup(
-                    InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_codes_btn"), "confirm_registration")),
+                replyMarkup: new InlineKeyboardMarkup([
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_codes_btn"), "confirm_registration")],
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "cancel"), "cancel_registration")],
+                ]),
                 cancellationToken: ct);
             return;
         }
