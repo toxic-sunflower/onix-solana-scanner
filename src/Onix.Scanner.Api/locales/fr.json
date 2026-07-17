@@ -1,0 +1,38 @@
+{
+  "language": "🇫🇷 Français",
+  "lang_code": "fr",
+
+  "welcome": "🧬 *ONIX Solana Scanner*\n\nScanner d'arbitrage en temps réel entre BingX Futures et Jupiter DEX.\n\n• Suivez les spreads en temps réel\n• Recevez des alertes Telegram\n• Gérez votre liste de suivi\n\nSélectionnez votre langue:",
+  "register_btn": "S'inscrire",
+  "main_menu": "📱 Menu principal",
+  "get_login_link": "Obtenir le lien de connexion",
+  "login_link": "✅ Lien de connexion:\n{link}\n\nCe lien expire dans 30 jours.",
+  "login_link_backup": "✅ Lien de connexion:\n{link}\n\n⚠️ Vous avez utilisé un code de secours. Allez dans Paramètres sur le site pour configurer un nouvel authenticateur.",
+  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.",
+  "backup_codes_title": "*Codes de secours (conservez-les !):*",
+  "reset_code_label": "*Code de réinitialisation:* `{code}`",
+  "reset_code_hint": "Si vous perdez l'accès à votre authenticateur ET aux codes de secours, utilisez ce code pour réinitialiser 2FA.",
+  "register_codes_btn": "J'ai sauvegardé les codes — M'inscrire",
+  "enter_otp": "Entrez votre code 2FA pour vous connecter.\n\nEnvoyez le code ou *annuler* pour abandonner.",
+  "enter_otp_for_link": "Entrez votre code 2FA pour obtenir un lien de connexion.\n\nEnvoyez le code ou *annuler* pour abandonner.",
+  "cancel": "Annuler",
+  "cancel_cmd": "Annulé.",
+  "code_expired": "Code expiré. Demandez-en un nouveau.",
+  "too_many_attempts": "Trop de tentatives échouées. Réessayez dans 5 minutes.",
+  "invalid_code": "Code invalide. {remaining} tentative(s) restante(s).\n\nEnvoyez *annuler* pour abandonner.",
+  "unknown_command": "Commande inconnue. Envoyez /start",
+  "bot_running": "🟢 Scanner en cours d'exécution",
+  "user_not_found": "Utilisateur non trouvé.",
+  "2fa_reset": "✅ 2FA a été réinitialisé. Vous pouvez maintenant vous connecter sans code.\n\nConfigurez un nouvel authenticateur dans Paramètres pour réactiver 2FA.",
+  "registration_required": "Vous devez d'abord configurer l'authentification à deux facteurs.\n\nAppuyez sur *S'inscrire* pour commencer.",
+  "registration_expired": "Inscription expirée. Réessayez.",
+
+  "signal_title": "🚨 {symbol}  {spread}% (Solana)",
+  "signal_profit": "💰 Profit: {spread}%",
+  "signal_bingx": "💵 BINGX: ${price}",
+  "signal_jupiter": "💵 Jupiter: ${price}",
+  "signal_contract": "📋 Contrat: {id}",
+
+  "scan_qr": "Scannez ce code QR dans votre application d'authentification, puis envoyez le code à 6 chiffres.",
+  "setup_2fa_step1": "*Étape 1:* Configurer l'authentification à deux facteurs\n\nOuvrez votre application d'authentification et ajoutez un nouveau compte:\n- Scannez le code QR ci-dessus\n\nOu saisissez le secret manuellement: `{secret}`"
+}
