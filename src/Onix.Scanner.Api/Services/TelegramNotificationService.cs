@@ -368,12 +368,15 @@ public sealed class TelegramNotificationService : BackgroundService
                 parseMode: ParseMode.Markdown,
                 replyMarkup: keyboard,
                 cancellationToken: ct);
+
+            try { await _bot!.DeleteMessage(chatId, userMsgId, ct); } catch { }
         }
         else
         {
             if (user.Language is not null)
                 _loc.SetLanguage(chatId, user.Language);
             await ShowMainMenu(chatId, ct);
+            try { await _bot!.DeleteMessage(chatId, userMsgId, ct); } catch { }
         }
     }
 
