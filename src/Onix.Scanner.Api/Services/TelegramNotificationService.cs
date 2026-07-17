@@ -299,15 +299,10 @@ public sealed class TelegramNotificationService : BackgroundService
                     var cancelRepo = cancelScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
                     var pendingUser = await cancelRepo.GetByTelegramIdAsync(fromId, ct);
                     if (pendingUser is not null && !pendingUser.Is2FAEnabled)
-                    {
-                        pendingUser.TwoFactorSecret = null;
-                        pendingUser.TwoFactorBackupCodes = null;
-                        pendingUser.TwoFactorResetCode = null;
-                        await cancelRepo.UpdateAsync(pendingUser, ct);
-                    }
+                        await cancelRepo.DeleteAsync(pendingUser.Id, ct);
                 }
                 _states.TryRemove(chatId.Value, out _);
-                await ShowMainMenu(chatId.Value, ct);
+                await HandleStart(chatId.Value, fromId, query.From!, "", 0, ct);
                 break;
             case "cancel_otp":
                 _totp.ClearChallenge(chatId.Value);

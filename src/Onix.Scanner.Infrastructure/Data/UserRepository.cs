@@ -29,6 +29,16 @@ public class UserRepository : IUserRepository
         await _db.SaveChangesAsync(ct);
     }
 
+    public async Task DeleteAsync(Guid userId, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is not null)
+        {
+            _db.Users.Remove(user);
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
     public async Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default)
     {
         await _db.Users.Where(u => u.Id == userId)

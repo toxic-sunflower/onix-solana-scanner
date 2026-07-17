@@ -8,6 +8,7 @@ public interface IUserRepository
     Task<User?> GetByTelegramIdAsync(long telegramId, CancellationToken ct = default);
     Task<User> CreateAsync(User user, CancellationToken ct = default);
     Task UpdateAsync(User user, CancellationToken ct = default);
+    Task DeleteAsync(Guid userId, CancellationToken ct = default);
     Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default);
     Task<int> GetTokenVersionAsync(Guid userId, CancellationToken ct = default);
     Task IncrementTokenVersionAsync(Guid userId, CancellationToken ct = default);
