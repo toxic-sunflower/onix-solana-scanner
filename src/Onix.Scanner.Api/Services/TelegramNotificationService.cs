@@ -163,10 +163,12 @@ public sealed class TelegramNotificationService : BackgroundService
         if (fromId is null) return;
 
         if (text.StartsWith("/start"))
+        {
             try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
-
-        // Check for active OTP challenge
-        if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
+            _totp.ClearChallenge(chatId);
+            _states.TryRemove(chatId, out _);
+        }
+        else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
