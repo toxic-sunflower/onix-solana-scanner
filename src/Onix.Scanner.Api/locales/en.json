@@ -8,7 +8,6 @@
   "get_login_link": "Get login link",
   "login_link": "✅ Login link:\n{link}\n\nThis link expires in 30 days.",
   "login_link_backup": "✅ Login link:\n{link}\n\n⚠️ You used a backup code. Go to Settings on the website to set up a new authenticator.",
-  "qr_caption": "Scan this QR code in your authenticator app, then send me the 6-digit code.",
   "backup_codes_title": "*Backup codes (save these!):*",
   "reset_code_label": "*Reset code:* `{code}`",
   "reset_code_hint": "If you lose access to your authenticator AND backup codes, use this to reset 2FA.",
@@ -33,9 +32,6 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contract: {id}",
 
-  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
-  "setup_apps": "📱 *Recommended authenticator apps:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/en-us/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nAny TOTP-compatible app will work.",
-  "qr_caption": "Scan this QR code in your authenticator app, then send me the 6-digit code.\n\nOr enter this secret manually: `{secret}`",
-  "scan_qr": "Scan this QR code in your authenticator app, then send me the 6-digit code.",
-  "setup_2fa_step1": "*Step 1:* Set up two-factor authentication\n\nOpen your authenticator app and add a new account:\n- Scan the QR code above\n\nOr enter this secret manually: `{secret}`"
+  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.\n\nPopular authenticator apps:",
+  "qr_caption": "Scan this QR code in your authenticator app, then send me the 6-digit code.\n\nOr enter this secret manually: `{secret}`"
 }

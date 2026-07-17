@@ -8,7 +8,6 @@
   "get_login_link": "Obtener enlace de inicio",
   "login_link": "✅ Enlace de inicio:\n{link}\n\nEste enlace expira en 30 días.",
   "login_link_backup": "✅ Enlace de inicio:\n{link}\n\n⚠️ Usaste un código de respaldo. Ve a Ajustes en el sitio web para configurar un nuevo autenticador.",
-  "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.",
   "backup_codes_title": "*Códigos de respaldo (¡guárdalos!):*",
   "reset_code_label": "*Código de restablecimiento:* `{code}`",
   "reset_code_hint": "Si pierdes el acceso a tu autenticador Y a los códigos de respaldo, usa este código para restablecer 2FA.",
@@ -33,9 +32,6 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contrato: {id}",
 
-  "setup_intro": "Para proteger tu cuenta contra accesos no autorizados, utilizamos autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.",
-  "setup_apps": "📱 *Aplicaciones recomendadas:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/es-es/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nCualquier app compatible con TOTP funcionará.",
-  "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.\n\nO ingresa el secreto manualmente: `{secret}`",
-  "scan_qr": "Escanea este código QR en tu aplicación de autenticación, luego envía el código de 6 dígitos.",
-  "setup_2fa_step1": "*Paso 1:* Configurar autenticación de dos factores\n\nAbre tu aplicación de autenticación y añade una nueva cuenta:\n- Escanea el QR de arriba\n\nO ingresa el secreto manualmente: `{secret}`"
+  "setup_intro": "Para proteger tu cuenta contra accesos no autorizados, utilizamos autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.\n\nAplicaciones populares de autenticación:",
+  "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.\n\nO ingresa el secreto manualmente: `{secret}`"
 }

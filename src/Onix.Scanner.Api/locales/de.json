@@ -8,7 +8,6 @@
   "get_login_link": "Login-Link erhalten",
   "login_link": "✅ Login-Link:\n{link}\n\nDieser Link läuft in 30 Tagen ab.",
   "login_link_backup": "✅ Login-Link:\n{link}\n\n⚠️ Du hast einen Backup-Code verwendet. Gehe zu den Einstellungen auf der Website, um einen neuen Authenticator einzurichten.",
-  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.",
   "backup_codes_title": "*Backup-Codes (speichere diese!):*",
   "reset_code_label": "*Reset-Code:* `{code}`",
   "reset_code_hint": "Wenn du den Zugriff auf deinen Authenticator UND die Backup-Codes verlierst, verwende diesen Code, um 2FA zurückzusetzen.",
@@ -33,9 +32,6 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Vertrag: {id}",
 
-  "setup_intro": "Um dein Konto vor unbefugtem Zugriff zu schützen, verwenden wir die Zwei-Faktor-Authentifizierung.\n\nFüge dieses Konto in deiner Authenticator-App hinzu und gib den 6-stelligen Code zur Bestätigung ein.",
-  "setup_apps": "📱 *Empfohlene Authenticator-Apps:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/de-de/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nJede TOTP-kompatible App funktioniert.",
-  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.\n\nOder gib das Secret manuell ein: `{secret}`",
-  "scan_qr": "Scanne diesen QR-Code in deiner Authenticator-App und sende dann den 6-stelligen Code.",
-  "setup_2fa_step1": "*Schritt 1:* Zwei-Faktor-Authentifizierung einrichten\n\nÖffne deine Authenticator-App und füge ein neues Konto hinzu:\n- Scanne den QR-Code oben\n\nOder gib das Secret manuell ein: `{secret}`"
+  "setup_intro": "Um dein Konto vor unbefugtem Zugriff zu schützen, verwenden wir die Zwei-Faktor-Authentifizierung.\n\nFüge dieses Konto in deiner Authenticator-App hinzu und gib den 6-stelligen Code zur Bestätigung ein.\n\nBeliebte Authenticator-Apps:",
+  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.\n\nOder gib das Secret manuell ein: `{secret}`"
 }

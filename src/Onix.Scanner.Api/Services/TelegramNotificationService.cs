@@ -394,11 +394,12 @@ public sealed class TelegramNotificationService : BackgroundService
         await _bot!.SendMessage(chatId: chatId,
             text: _loc.Get(chatId, "setup_intro"),
             parseMode: ParseMode.Markdown,
-            cancellationToken: ct);
-
-        await _bot!.SendMessage(chatId: chatId,
-            text: _loc.Get(chatId, "setup_apps"),
-            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithUrl("Google Authenticator", "https://support.google.com/accounts/answer/1066447")],
+                [InlineKeyboardButton.WithUrl("Authy", "https://authy.com")],
+                [InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://www.microsoft.com/en-us/security/mobile-authenticator-app")],
+                [InlineKeyboardButton.WithUrl("2FAS", "https://2fas.com")],
+            ]),
             cancellationToken: ct);
 
         await using var ms = new MemoryStream();

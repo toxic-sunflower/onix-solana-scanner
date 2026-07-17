@@ -8,7 +8,6 @@
   "get_login_link": "Obtenir le lien de connexion",
   "login_link": "✅ Lien de connexion:\n{link}\n\nCe lien expire dans 30 jours.",
   "login_link_backup": "✅ Lien de connexion:\n{link}\n\n⚠️ Vous avez utilisé un code de secours. Allez dans Paramètres sur le site pour configurer un nouvel authenticateur.",
-  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.",
   "backup_codes_title": "*Codes de secours (conservez-les !):*",
   "reset_code_label": "*Code de réinitialisation:* `{code}`",
   "reset_code_hint": "Si vous perdez l'accès à votre authenticateur ET aux codes de secours, utilisez ce code pour réinitialiser 2FA.",
@@ -33,9 +32,6 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contrat: {id}",
 
-  "setup_intro": "Pour protéger votre compte contre les accès non autorisés, nous utilisons l'authentification à deux facteurs.\n\nAjoutez ce compte à votre application d'authentification et saisissez le code à 6 chiffres pour confirmer.",
-  "setup_apps": "📱 *Applications recommandées :*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/fr-fr/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nToute application compatible TOTP fonctionnera.",
-  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.\n\nOu saisissez le secret manuellement : `{secret}`",
-  "scan_qr": "Scannez ce code QR dans votre application d'authentification, puis envoyez le code à 6 chiffres.",
-  "setup_2fa_step1": "*Étape 1:* Configurer l'authentification à deux facteurs\n\nOuvrez votre application d'authentification et ajoutez un nouveau compte:\n- Scannez le code QR ci-dessus\n\nOu saisissez le secret manuellement: `{secret}`"
+  "setup_intro": "Pour protéger votre compte contre les accès non autorisés, nous utilisons l'authentification à deux facteurs.\n\nAjoutez ce compte à votre application d'authentification et saisissez le code à 6 chiffres pour confirmer.\n\nApplications d'authentification populaires :",
+  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.\n\nOu saisissez le secret manuellement : `{secret}`"
 }
