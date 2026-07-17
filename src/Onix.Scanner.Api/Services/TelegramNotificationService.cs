@@ -272,6 +272,12 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
+        if (data.StartsWith("app_"))
+        {
+            await HandleAppQrCode(chatId.Value, data["app_".Length..], ct);
+            return;
+        }
+
         switch (data)
         {
             case "register":
@@ -395,10 +401,10 @@ public sealed class TelegramNotificationService : BackgroundService
             text: _loc.Get(chatId, "setup_intro"),
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup([
-                [InlineKeyboardButton.WithUrl("Google Authenticator", "https://support.google.com/accounts/answer/1066447")],
-                [InlineKeyboardButton.WithUrl("Authy", "https://authy.com")],
-                [InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://www.microsoft.com/en-us/security/mobile-authenticator-app")],
-                [InlineKeyboardButton.WithUrl("2FAS", "https://2fas.com")],
+                [InlineKeyboardButton.WithCallbackData("Google Authenticator", "app_google")],
+                [InlineKeyboardButton.WithCallbackData("Authy", "app_authy")],
+                [InlineKeyboardButton.WithCallbackData("Microsoft Authenticator", "app_microsoft")],
+                [InlineKeyboardButton.WithCallbackData("2FAS", "app_2fas")],
             ]),
             cancellationToken: ct);
 
@@ -415,6 +421,37 @@ public sealed class TelegramNotificationService : BackgroundService
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
             caption: _loc.Get(chatId, "qr_caption", ("secret", secret)),
             parseMode: ParseMode.Markdown,
+            cancellationToken: ct);
+    }
+
+    private static readonly Dictionary<string, (string Name, string Url)> _apps = new()
+    {
+        ["google"] = ("Google Authenticator", "https://support.google.com/accounts/answer/1066447"),
+        ["authy"] = ("Authy", "https://authy.com"),
+        ["microsoft"] = ("Microsoft Authenticator", "https://www.microsoft.com/en-us/security/mobile-authenticator-app"),
+        ["2fas"] = ("2FAS", "https://2fas.com"),
+    };
+
+    private async Task HandleAppQrCode(long chatId, string appKey, CancellationToken ct)
+    {
+        if (!_apps.TryGetValue(appKey, out var app)) return;
+
+        await using var ms = new MemoryStream();
+        using var qrGen = new QRCoder.QRCodeGenerator();
+        using var qrCode = qrGen.CreateQrCode(app.Url, QRCoder.QRCodeGenerator.ECCLevel.Q);
+        using var png = new QRCoder.PngByteQRCode(qrCode);
+        var pngBytes = png.GetGraphic(4);
+        await ms.WriteAsync(pngBytes, ct);
+        ms.Position = 0;
+
+        await _bot!.SendPhoto(
+            chatId: chatId,
+            photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qr.png"),
+            caption: _loc.Get(chatId, "app_qr_caption", ("name", app.Name)),
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithUrl("Download", app.Url)],
+            ]),
             cancellationToken: ct);
     }
 

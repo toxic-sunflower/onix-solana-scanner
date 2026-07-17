@@ -33,5 +33,6 @@
   "signal_contract": "📋 Contrato: {id}",
 
   "setup_intro": "Para proteger tu cuenta contra accesos no autorizados, utilizamos autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.\n\nAplicaciones populares de autenticación:",
-  "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.\n\nO ingresa el secreto manualmente: `{secret}`"
+  "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.\n\nO ingresa el secreto manualmente: `{secret}`",
+  "app_qr_caption": "*{name}*\n\nEscanea el código QR con tu teléfono o abre el enlace de abajo:"
 }

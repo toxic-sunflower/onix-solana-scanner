@@ -33,5 +33,6 @@
   "signal_contract": "📋 Contrat: {id}",
 
   "setup_intro": "Pour protéger votre compte contre les accès non autorisés, nous utilisons l'authentification à deux facteurs.\n\nAjoutez ce compte à votre application d'authentification et saisissez le code à 6 chiffres pour confirmer.\n\nApplications d'authentification populaires :",
-  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.\n\nOu saisissez le secret manuellement : `{secret}`"
+  "qr_caption": "Scannez ce code QR dans votre application d'authentification, puis envoyez-moi le code à 6 chiffres.\n\nOu saisissez le secret manuellement : `{secret}`",
+  "app_qr_caption": "*{name}*\n\nScannez le code QR avec votre téléphone ou ouvrez le lien ci-dessous :"
 }
