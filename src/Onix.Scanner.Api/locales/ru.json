@@ -2,7 +2,9 @@
   "language": "🇷🇺 Русский",
   "lang_code": "ru",
 
-  "welcome": "🧬 *ONIX Solana Scanner*\n\nReal-time arbitrage scanner between BingX Futures and Jupiter DEX.\n\n• Track spreads in real time\n• Get Telegram alerts\n• Manage your watchlist\n\nSelect your language:",
+  "welcome": "🧬 *ONIX Solana Scanner*\n\nСканер арбитража в реальном времени между BingX Futures и Jupiter DEX.\n\n• Отслеживайте спреды в реальном времени\n• Получайте уведомления в Telegram\n• Управляйте своим списком отслеживания\n\nВыберите язык:",
+
+
   "register_btn": "Регистрация",
   "main_menu": "📱 Главное меню",
   "get_login_link": "Получить ссылку входа",
