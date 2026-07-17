@@ -336,11 +336,21 @@ public sealed class TelegramNotificationService : BackgroundService
             var langBtns = _loc.GetOtherLanguages(chatId)
                 .Select(l => InlineKeyboardButton.WithCallbackData(l.Label, $"lang_{l.Code}"))
                 .ToArray();
+
+            var keyboard = langBtns.Length > 0
+                ? new InlineKeyboardMarkup([
+                    langBtns.ToArray(),
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(currentLang, "register_btn"), "register")],
+                  ])
+                : new InlineKeyboardMarkup([
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(currentLang, "register_btn"), "register")],
+                  ]);
+
             await _bot!.SendMessage(
                 chatId: chatId,
                 text: _loc.Get(currentLang, "welcome"),
                 parseMode: ParseMode.Markdown,
-                replyMarkup: new InlineKeyboardMarkup(langBtns),
+                replyMarkup: keyboard,
                 cancellationToken: ct);
         }
         else
