@@ -26,8 +26,13 @@ public class TotpService
         if (code.Length != Digits || !code.All(char.IsDigit))
             return false;
 
-        var expected = GenerateCode(secret, DateTime.UtcNow);
-        return code == expected;
+        for (var i = -1; i <= 1; i++)
+        {
+            var expected = GenerateCode(secret, DateTime.UtcNow.AddSeconds(i * StepSeconds));
+            if (code == expected)
+                return true;
+        }
+        return false;
     }
 
     public string GenerateCode(string secret, DateTime timestamp)
