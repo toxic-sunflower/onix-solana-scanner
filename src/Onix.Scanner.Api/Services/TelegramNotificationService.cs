@@ -252,12 +252,21 @@ public sealed class TelegramNotificationService : BackgroundService
             }
             else
             {
+                var keyboard = otherLangBtns.Length > 0
+                    ? new InlineKeyboardMarkup([
+                        otherLangBtns.ToArray(),
+                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_btn"), "register")],
+                      ])
+                    : new InlineKeyboardMarkup([
+                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_btn"), "register")],
+                      ]);
+
                 await _bot!.EditMessageText(
                     chatId: chatId.Value,
                     messageId: query.Message!.MessageId,
                     text: _loc.Get(lang, "welcome"),
                     parseMode: ParseMode.Markdown,
-                    replyMarkup: new InlineKeyboardMarkup([[.. otherLangBtns]]),
+                    replyMarkup: keyboard,
                     cancellationToken: ct);
             }
             return;
