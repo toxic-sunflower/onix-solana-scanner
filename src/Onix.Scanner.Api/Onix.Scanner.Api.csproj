@@ -27,7 +27,11 @@
     <InternalsVisibleTo Include="Onix.Scanner.Tests" />
   </ItemGroup>
 
-
+  <ItemGroup>
+    <Content Update="locales\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.7" />
@@ -37,6 +41,8 @@
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Npgsql.DependencyInjection" Version="10.0.3" />
+    <PackageReference Include="DotNetEnv" Version="3.2.0" />
+    <PackageReference Include="QRCoder" Version="1.8.0" />
     <PackageReference Include="Telegram.Bot" Version="22.10.1.1" />
   </ItemGroup>
 

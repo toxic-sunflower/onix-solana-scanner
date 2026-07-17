@@ -46,6 +46,10 @@ public sealed class MigratorService : IHostedService
                 _logger.LogWarning(ex, "Migration attempt {A}/10 failed, retrying in 3s", attempt);
                 await Task.Delay(TimeSpan.FromSeconds(3), ct);
             }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "All 10 migration attempts failed — continuing without DB");
+            }
         }
     }
 

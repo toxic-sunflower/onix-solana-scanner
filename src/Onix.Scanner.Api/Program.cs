@@ -14,6 +14,27 @@ using Onix.Scanner.Infrastructure.Services;
 using Onix.Scanner.Api.Hubs;
 using Onix.Scanner.Api.Services;
 
+var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
+if (File.Exists(envPath))
+{
+    var envs = File.ReadAllLines(envPath)
+        .Select(l => { var i = l.IndexOf('='); return i > 0 ? (l[..i].Trim(), l[(i+1)..].Trim()) : default; })
+        .Where(t => t.Item1 != null)
+        .ToDictionary(t => t.Item1, t => t.Item2 is ['"', .., '"'] ? t.Item2[1..^1] : t.Item2);
+
+    foreach (var (k, v) in envs)
+        Environment.SetEnvironmentVariable(k, v);
+
+    if (envs.TryGetValue("TELEGRAM_BOT_TOKEN", out var tgt))
+        Environment.SetEnvironmentVariable("Telegram__BotToken", tgt);
+    if (envs.TryGetValue("TELEGRAM_BOT_USERNAME", out var tgu))
+        Environment.SetEnvironmentVariable("Telegram__BotUsername", tgu);
+    if (envs.TryGetValue("ENCRYPTION_KEY", out var ek))
+        Environment.SetEnvironmentVariable("Encryption__Key", ek);
+    if (envs.TryGetValue("APP_URL", out var au))
+        Environment.SetEnvironmentVariable("App__Url", au);
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
@@ -92,6 +113,7 @@ builder.Services.AddHostedService<MigratorService>();
 builder.Services.AddHostedService<BingXConnectorService>();
 builder.Services.AddHostedService<SpreadEngineService>();
 builder.Services.AddHostedService<JupiterWorkerService>();
+builder.Services.AddSingleton<LocalizationService>();
 builder.Services.AddSingleton<TelegramNotificationService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramNotificationService>());
 builder.Services.AddHostedService<AggregationService>();
