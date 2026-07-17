@@ -519,6 +519,23 @@ public sealed class TelegramNotificationService : BackgroundService
             cancellationToken: ct);
     }
 
+    private async Task PromptOtpCode(long chatId, BotState state, CancellationToken ct)
+    {
+        var text = state.Purpose switch
+        {
+            "register" => _loc.Get(chatId, "enter_otp"),
+            "auth" => _loc.Get(chatId, "enter_otp"),
+            "link" => _loc.Get(chatId, "enter_otp_for_link"),
+            _ => _loc.Get(chatId, "enter_otp"),
+        };
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: text,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
+            cancellationToken: ct);
+    }
+
     private async Task HandleOtpInput(long chatId, long fromId, string otp, BotState state, CancellationToken ct)
     {
         using var scope = _services.CreateScope();
@@ -553,8 +570,9 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (result.Expired)
         {
-            _states.TryRemove(chatId, out _);
+            _totp.StartChallenge(chatId, state.UserId, state.Purpose);
             await _bot!.SendMessage(chatId: chatId, text: _loc.Get(chatId, "code_expired"), cancellationToken: ct);
+            await PromptOtpCode(chatId, state, ct);
             return;
         }
 
