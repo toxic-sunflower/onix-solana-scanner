@@ -20,6 +20,7 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly LocalizationService _loc;
 
     private readonly ConcurrentDictionary<long, BotState> _states = new();
+    private readonly ConcurrentDictionary<long, int> _userMsgIds = new();
 
     private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
 
@@ -180,6 +181,7 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (text.StartsWith("/start"))
         {
+            _userMsgIds[chatId] = msg.MessageId;
             var parts = text.Split(' ');
             var payload = parts.Length > 1 ? parts[1] : "";
             DetectInitialLanguage(chatId, msg.From?.LanguageCode);
@@ -276,6 +278,8 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             case "register":
                 try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                if (_userMsgIds.TryRemove(chatId.Value, out var userMsgId))
+                    try { await _bot!.DeleteMessage(chatId.Value, userMsgId, ct); } catch { }
                 await StartRegistration(chatId.Value, fromId, ct);
                 break;
             case "confirm_registration":
