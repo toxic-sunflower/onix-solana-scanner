@@ -33,6 +33,6 @@
   "signal_contract": "📋 Contrato: {id}",
 
   "setup_intro": "Para proteger tu cuenta contra accesos no autorizados, utilizamos autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.",
-  "manual_secret": "O ingresa este secreto manualmente: `{secret}`",
+  "manual_secret": "O ingresa este secreto manualmente: <code>{secret}</code>",
   "popular_apps": "— Aplicaciones populares de autenticación:"
 }

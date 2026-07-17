@@ -33,6 +33,6 @@
   "signal_contract": "📋 Vertrag: {id}",
 
   "setup_intro": "Um dein Konto vor unbefugtem Zugriff zu schützen, verwenden wir die Zwei-Faktor-Authentifizierung.\n\nFüge dieses Konto in deiner Authenticator-App hinzu und gib den 6-stelligen Code zur Bestätigung ein.",
-  "manual_secret": "Oder gib dieses Secret manuell ein: `{secret}`",
+  "manual_secret": "Oder gib dieses Secret manuell ein: <code>{secret}</code>",
   "popular_apps": "— Beliebte Authenticator-Apps:"
 }

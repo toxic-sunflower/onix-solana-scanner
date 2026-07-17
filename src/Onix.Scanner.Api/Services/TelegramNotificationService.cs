@@ -406,12 +406,12 @@ public sealed class TelegramNotificationService : BackgroundService
         await ms.WriteAsync(pngBytes, ct);
         ms.Position = 0;
 
-        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}\n[Google Authenticator]({_appUrl}/app?name=google)\n[Authy]({_appUrl}/app?name=authy)\n[Microsoft Authenticator]({_appUrl}/app?name=microsoft)\n[2FAS]({_appUrl}/app?name=2fas)";
+        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}\n<a href=\"{_appUrl}/app?name=google\">Google Authenticator</a>\n<a href=\"{_appUrl}/app?name=authy\">Authy</a>\n<a href=\"{_appUrl}/app?name=microsoft\">Microsoft Authenticator</a>\n<a href=\"{_appUrl}/app?name=2fas\">2FAS</a>";
         await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
             caption: caption,
-            parseMode: ParseMode.Markdown,
+            parseMode: ParseMode.Html,
             cancellationToken: ct);
     }
 

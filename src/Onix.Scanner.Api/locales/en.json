@@ -33,6 +33,6 @@
   "signal_contract": "📋 Contract: {id}",
 
   "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
-  "manual_secret": "Or enter this secret manually: `{secret}`",
+  "manual_secret": "Or enter this secret manually: <code>{secret}</code>",
   "popular_apps": "— Popular authenticator apps:"
 }
