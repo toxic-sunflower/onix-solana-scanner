@@ -33,7 +33,7 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contract: {id}",
 
-  "setup_intro": "*Why two-factor authentication?*\n\nTwo-factor authentication adds an extra layer of security. Even if someone gets your password, they won't be able to log in without the 6-digit code from your authenticator app.\n\n*How it works:*\n1. Add this account to your authenticator app\n2. The app generates a new 6-digit code every 30 seconds\n3. Enter that code here to verify you've set it up correctly",
+  "setup_intro": "Set up two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
   "setup_apps": "📱 *Recommended authenticator apps:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/en-us/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nAny TOTP-compatible app will work.",
   "qr_caption": "Scan this QR code in your authenticator app, then send me the 6-digit code.\n\nOr enter this secret manually: `{secret}`",
   "scan_qr": "Scan this QR code in your authenticator app, then send me the 6-digit code.",
