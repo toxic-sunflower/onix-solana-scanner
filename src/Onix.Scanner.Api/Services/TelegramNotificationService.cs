@@ -413,10 +413,22 @@ public sealed class TelegramNotificationService : BackgroundService
             caption: caption,
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup([
-                [InlineKeyboardButton.WithUrl("Google Authenticator", "https://support.google.com/accounts/answer/1066447")],
-                [InlineKeyboardButton.WithUrl("Authy", "https://authy.com")],
-                [InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://www.microsoft.com/en-us/security/mobile-authenticator-app")],
-                [InlineKeyboardButton.WithUrl("2FAS", "https://2fas.com")],
+                [
+                    InlineKeyboardButton.WithUrl("Google Authenticator", "https://apps.apple.com/app/google-authenticator/id599085139"),
+                    InlineKeyboardButton.WithUrl("Google Authenticator", "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2"),
+                ],
+                [
+                    InlineKeyboardButton.WithUrl("Authy", "https://apps.apple.com/app/authy/id494168017"),
+                    InlineKeyboardButton.WithUrl("Authy", "https://play.google.com/store/apps/details?id=com.authy.authy"),
+                ],
+                [
+                    InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://apps.apple.com/app/microsoft-authenticator/id983156458"),
+                    InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://play.google.com/store/apps/details?id=com.microsoft.authenticator"),
+                ],
+                [
+                    InlineKeyboardButton.WithUrl("2FAS", "https://apps.apple.com/app/2fas-auth/id1217793794"),
+                    InlineKeyboardButton.WithUrl("2FAS", "https://play.google.com/store/apps/details?id=com.authenticator2.android"),
+                ],
             ]),
             cancellationToken: ct);
     }
