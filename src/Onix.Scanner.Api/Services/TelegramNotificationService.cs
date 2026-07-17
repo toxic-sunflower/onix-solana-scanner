@@ -396,6 +396,7 @@ public sealed class TelegramNotificationService : BackgroundService
             Purpose = "register",
             RegistrationSecret = secret,
             RegistrationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
+            RegistrationBackupCodes = string.Join(",", backupCodes.Select(c => c.plain)),
             RegistrationResetCode = resetCode,
         };
 
@@ -590,23 +591,6 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        if (result.UsedBackup && result.MatchedHash is not null && user is not null)
-        {
-            user.TwoFactorBackupCodes = _totp.RemoveUsedBackupCode(user.TwoFactorBackupCodes ?? "", result.MatchedHash);
-            await userRepo.UpdateAsync(user, ct);
-        }
-
-        var authToken = _jwt.GenerateAccessToken(user!.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
-        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = hash,
-            LastJti = jti,
-            DeviceName = "Telegram Bot",
-            ExpiresAt = DateTime.UtcNow.AddDays(30),
-        }, ct);
-
         if (state.Purpose == "register")
         {
             _states[chatId] = new BotState
@@ -618,8 +602,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 RegistrationResetCode = state.RegistrationResetCode,
             };
 
-            var backupCodes = state.RegistrationBackupHashes?.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                .Select(h => h.Length >= 12 ? h[..12] : h).ToList() ?? [];
+            var backupCodes = state.RegistrationBackupCodes?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
 
             var lang = _loc.GetLanguage(chatId);
             var codesMsg = $"{_loc.Get(lang, "backup_codes_title")}\n" +
@@ -636,6 +619,23 @@ public sealed class TelegramNotificationService : BackgroundService
                 cancellationToken: ct);
             return;
         }
+
+        if (result.UsedBackup && result.MatchedHash is not null && user is not null)
+        {
+            user.TwoFactorBackupCodes = _totp.RemoveUsedBackupCode(user.TwoFactorBackupCodes ?? "", result.MatchedHash);
+            await userRepo.UpdateAsync(user, ct);
+        }
+
+        var authToken = _jwt.GenerateAccessToken(user!.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = hash,
+            LastJti = jti,
+            DeviceName = "Telegram Bot",
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
 
         _states.TryRemove(chatId, out _);
 
@@ -730,5 +730,6 @@ class BotState
     public string Purpose { get; set; } = "";
     public string? RegistrationSecret { get; set; }
     public string? RegistrationBackupHashes { get; set; }
+    public string? RegistrationBackupCodes { get; set; }
     public string? RegistrationResetCode { get; set; }
 }
