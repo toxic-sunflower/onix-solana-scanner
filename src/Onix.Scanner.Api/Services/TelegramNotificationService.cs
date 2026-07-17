@@ -406,30 +406,12 @@ public sealed class TelegramNotificationService : BackgroundService
         await ms.WriteAsync(pngBytes, ct);
         ms.Position = 0;
 
-        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}";
+        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}\n[Google Authenticator]({_appUrl}/app/google)\n[Authy]({_appUrl}/app/authy)\n[Microsoft Authenticator]({_appUrl}/app/microsoft)\n[2FAS]({_appUrl}/app/2fas)";
         await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
             caption: caption,
             parseMode: ParseMode.Markdown,
-            replyMarkup: new InlineKeyboardMarkup([
-                [
-                    InlineKeyboardButton.WithUrl("Google Authenticator", "https://apps.apple.com/app/google-authenticator/id599085139"),
-                    InlineKeyboardButton.WithUrl("Google Authenticator", "https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2"),
-                ],
-                [
-                    InlineKeyboardButton.WithUrl("Authy", "https://apps.apple.com/app/authy/id494168017"),
-                    InlineKeyboardButton.WithUrl("Authy", "https://play.google.com/store/apps/details?id=com.authy.authy"),
-                ],
-                [
-                    InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://apps.apple.com/app/microsoft-authenticator/id983156458"),
-                    InlineKeyboardButton.WithUrl("Microsoft Authenticator", "https://play.google.com/store/apps/details?id=com.microsoft.authenticator"),
-                ],
-                [
-                    InlineKeyboardButton.WithUrl("2FAS", "https://apps.apple.com/app/2fas-auth/id1217793794"),
-                    InlineKeyboardButton.WithUrl("2FAS", "https://play.google.com/store/apps/details?id=com.authenticator2.android"),
-                ],
-            ]),
             cancellationToken: ct);
     }
 
