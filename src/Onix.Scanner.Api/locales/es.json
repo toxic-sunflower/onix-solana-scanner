@@ -33,7 +33,7 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Contrato: {id}",
 
-  "setup_intro": "Configura la autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.",
+  "setup_intro": "Para proteger tu cuenta contra accesos no autorizados, utilizamos autenticación de dos factores.\n\nAñade esta cuenta a tu aplicación de autenticación e ingresa el código de 6 dígitos para confirmar.",
   "setup_apps": "📱 *Aplicaciones recomendadas:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/es-es/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nCualquier app compatible con TOTP funcionará.",
   "qr_caption": "Escanea este código QR en tu aplicación de autenticación, luego envíame el código de 6 dígitos.\n\nO ingresa el secreto manualmente: `{secret}`",
   "scan_qr": "Escanea este código QR en tu aplicación de autenticación, luego envía el código de 6 dígitos.",
