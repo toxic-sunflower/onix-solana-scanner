@@ -33,6 +33,9 @@
   "signal_jupiter": "💵 Jupiter: ${price}",
   "signal_contract": "📋 Vertrag: {id}",
 
+  "setup_intro": "*Warum Zwei-Faktor-Authentifizierung?*\n\n2FA bietet eine zusätzliche Sicherheitsebene. Selbst wenn jemand dein Passwort kennt, kann er sich ohne den 6-stelligen Code aus deiner Authenticator-App nicht anmelden.\n\n*So funktioniert es:*\n1. Füge dieses Konto in deiner Authenticator-App hinzu\n2. Die App generiert alle 30 Sekunden einen neuen 6-stelligen Code\n3. Gib den Code hier ein, um die Einrichtung zu bestätigen",
+  "setup_apps": "📱 *Empfohlene Authenticator-Apps:*\n\n• [Google Authenticator](https://support.google.com/accounts/answer/1066447)\n• [Authy](https://authy.com)\n• [Microsoft Authenticator](https://www.microsoft.com/de-de/security/mobile-authenticator-app)\n• [2FAS](https://2fas.com)\n\nJede TOTP-kompatible App funktioniert.",
+  "qr_caption": "Scanne diesen QR-Code in deiner Authenticator-App und sende mir dann den 6-stelligen Code.\n\nOder gib das Secret manuell ein: `{secret}`",
   "scan_qr": "Scanne diesen QR-Code in deiner Authenticator-App und sende dann den 6-stelligen Code.",
   "setup_2fa_step1": "*Schritt 1:* Zwei-Faktor-Authentifizierung einrichten\n\nÖffne deine Authenticator-App und füge ein neues Konto hinzu:\n- Scanne den QR-Code oben\n\nOder gib das Secret manuell ein: `{secret}`"
 }

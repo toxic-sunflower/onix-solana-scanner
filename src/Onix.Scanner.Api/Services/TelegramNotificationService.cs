@@ -382,6 +382,16 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _totp.StartChallenge(chatId, Guid.Empty, "register");
 
+        await _bot!.SendMessage(chatId: chatId,
+            text: _loc.Get(chatId, "setup_intro"),
+            parseMode: ParseMode.Markdown,
+            cancellationToken: ct);
+
+        await _bot!.SendMessage(chatId: chatId,
+            text: _loc.Get(chatId, "setup_apps"),
+            parseMode: ParseMode.Markdown,
+            cancellationToken: ct);
+
         await using var ms = new MemoryStream();
         using var qrGen = new QRCoder.QRCodeGenerator();
         using var qrCode = qrGen.CreateQrCode(qrUri, QRCoder.QRCodeGenerator.ECCLevel.Q);
@@ -393,7 +403,7 @@ public sealed class TelegramNotificationService : BackgroundService
         await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
-            caption: _loc.Get(chatId, "qr_caption"),
+            caption: _loc.Get(chatId, "qr_caption", ("secret", secret)),
             parseMode: ParseMode.Markdown,
             cancellationToken: ct);
     }
