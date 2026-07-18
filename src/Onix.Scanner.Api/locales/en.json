@@ -18,7 +18,7 @@
   "cancel_cmd": "Cancelled.",
   "code_expired": "Code expired. Request a new one.",
   "too_many_attempts": "Too many failed attempts. Try again in 5 minutes.",
-  "invalid_code": "Invalid code. {remaining} attempt(s) remaining.\n\nType *cancel* to abort.",
+  "invalid_code": "Invalid code. {remaining} attempt(s) remaining.",
   "unknown_command": "Unknown command. Send /start",
   "bot_running": "🟢 Scanner is running",
   "user_not_found": "User not found.",

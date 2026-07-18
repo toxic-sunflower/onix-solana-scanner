@@ -639,6 +639,7 @@ public sealed class TelegramNotificationService : BackgroundService
             await _bot!.SendMessage(chatId: chatId,
                 text: _loc.Get(chatId, "invalid_code", ("remaining", remaining.ToString())),
                 parseMode: ParseMode.Markdown,
+                replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
                 cancellationToken: ct);
             return;
         }
