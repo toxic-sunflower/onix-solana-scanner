@@ -340,44 +340,6 @@ public sealed class TelegramNotificationService : BackgroundService
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
         var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
 
-        if (payload.StartsWith("auth_"))
-        {
-            if (user is null)
-            {
-                user = new Shared.Models.User
-                {
-                    TelegramId = fromId,
-                    TelegramUsername = tgUser.Username,
-                    DisplayName = tgUser.FirstName,
-                    LastLoginAt = DateTime.UtcNow,
-                    Status = "new",
-                    Is2FAEnabled = false,
-                };
-                user = await userRepo.CreateAsync(user, ct);
-                await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
-            }
-
-            if (user.Language is not null)
-                _loc.SetLanguage(chatId, user.Language);
-
-            if (user.Status != "active")
-            {
-                await ShowRegistrationRequired(chatId, ct);
-                return;
-            }
-
-            _totp.StartChallenge(chatId, user.Id, "auth");
-            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
-            var otpMsg = await _bot!.SendMessage(
-                chatId: chatId,
-                text: _loc.Get(chatId, "enter_otp"),
-                parseMode: ParseMode.Markdown,
-                replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
-                cancellationToken: ct);
-            _lastScreenMsg[chatId] = otpMsg.MessageId;
-            return;
-        }
-
         if (user is not null)
         {
             if (user.Language is not null)
