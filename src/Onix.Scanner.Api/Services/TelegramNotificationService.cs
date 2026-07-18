@@ -376,7 +376,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 _loc.SetLanguage(chatId, user.Language);
 
             _totp.StartChallenge(chatId, user.Id, "auth");
-            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
+            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth", ValidationSecret = user.TwoFactorSecret, ValidationBackupHashes = user.TwoFactorBackupCodes };
             var otpMsg = await _bot!.SendMessage(
                 chatId: chatId,
                 text: _loc.Get(chatId, "enter_otp"),
@@ -436,6 +436,8 @@ public sealed class TelegramNotificationService : BackgroundService
             State = BotStep.AwaitingOtp,
             UserId = Guid.Empty,
             Purpose = "register",
+            ValidationSecret = secret,
+            ValidationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
             RegistrationSecret = secret,
             RegistrationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
             RegistrationBackupCodes = string.Join(",", backupCodes.Select(c => c.plain)),
@@ -516,7 +518,7 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
+        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link", ValidationSecret = user.TwoFactorSecret, ValidationBackupHashes = user.TwoFactorBackupCodes };
         _logger.LogInformation("PromptOtpForLink: userId={UserId}, chatId={ChatId}, is2fa={Is2FA}, hasSecret={HasSecret}",
             user.Id, chatId, user.Is2FAEnabled, user.TwoFactorSecret is not null);
         await DeletePreviousScreen(chatId, ct);
@@ -575,16 +577,7 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        var secret = state.Purpose == "register" ? state.RegistrationSecret : user!.TwoFactorSecret;
-        var backup = state.Purpose == "register" ? state.RegistrationBackupHashes : user!.TwoFactorBackupCodes;
-
-        _logger.LogInformation("HandleOtpInput: purpose={Purpose}, userIsNull={UserNull}, secretIsNull={SecretNull}, backupIsNull={BackupNull}",
-            state.Purpose, user is null, secret is null, backup is null);
-
-        var result = _totp.TryValidateOtp(chatId, otp, secret, backup);
-
-        _logger.LogInformation("TryValidateOtp: expired={Expired}, blocked={Blocked}, validated={Validated}, remaining={Remaining}",
-            result.Expired, result.Blocked, result.Validated, result.RemainingAttempts);
+        var result = _totp.TryValidateOtp(chatId, otp, state.ValidationSecret, state.ValidationBackupHashes);
 
         if (result.Expired)
         {
@@ -797,6 +790,8 @@ class BotState
     public BotStep State { get; set; }
     public Guid UserId { get; set; }
     public string Purpose { get; set; } = "";
+    public string? ValidationSecret { get; set; }
+    public string? ValidationBackupHashes { get; set; }
     public string? RegistrationSecret { get; set; }
     public string? RegistrationBackupHashes { get; set; }
     public string? RegistrationBackupCodes { get; set; }
