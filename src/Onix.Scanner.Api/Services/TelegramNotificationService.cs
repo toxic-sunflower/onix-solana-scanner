@@ -176,6 +176,8 @@ public sealed class TelegramNotificationService : BackgroundService
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
             {
+                foreach (var mid in state.FlowMessageIds)
+                    try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
                 _totp.ClearChallenge(chatId);
                 _states.TryRemove(chatId, out _);
                 await HandleStart(chatId, fromId.Value, msg.From!, "", 0, ct);
@@ -300,6 +302,9 @@ public sealed class TelegramNotificationService : BackgroundService
                 break;
             case "cancel_registration":
                 try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                if (_states.TryGetValue(chatId.Value, out var cancelState))
+                    foreach (var mid in cancelState.FlowMessageIds)
+                        try { await _bot!.DeleteMessage(chatId.Value, mid, ct); } catch { }
                 using (var cancelScope = _services.CreateScope())
                 {
                     var cancelRepo = cancelScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
@@ -312,8 +317,13 @@ public sealed class TelegramNotificationService : BackgroundService
                 break;
             case "cancel_otp":
                 try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
-                if (_states.TryGetValue(chatId.Value, out var otpState) && otpState.RegistrationQrMsgId > 0)
-                    try { await _bot!.DeleteMessage(chatId.Value, otpState.RegistrationQrMsgId, ct); } catch { }
+                if (_states.TryGetValue(chatId.Value, out var otpState))
+                {
+                    foreach (var mid in otpState.FlowMessageIds)
+                        try { await _bot!.DeleteMessage(chatId.Value, mid, ct); } catch { }
+                    if (otpState.RegistrationQrMsgId > 0)
+                        try { await _bot!.DeleteMessage(chatId.Value, otpState.RegistrationQrMsgId, ct); } catch { }
+                }
                 _totp.ClearChallenge(chatId.Value);
                 _states.TryRemove(chatId.Value, out _);
                 using (var otpScope = _services.CreateScope())
@@ -469,7 +479,10 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _lastScreenMsg[chatId] = qrMsg.MessageId;
         if (_states.TryGetValue(chatId, out var s))
+        {
             s.RegistrationQrMsgId = qrMsg.MessageId;
+            s.FlowMessageIds.Add(qrMsg.MessageId);
+        }
     }
 
     private async Task CompleteRegistration(long chatId, long fromId, CancellationToken ct)
@@ -529,6 +542,7 @@ public sealed class TelegramNotificationService : BackgroundService
             replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
             cancellationToken: ct);
         _lastScreenMsg[chatId] = otpMsg.MessageId;
+        _states[chatId].FlowMessageIds.Add(otpMsg.MessageId);
     }
 
     private async Task PromptOtpCode(long chatId, BotState state, CancellationToken ct)
@@ -547,6 +561,7 @@ public sealed class TelegramNotificationService : BackgroundService
             replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
             cancellationToken: ct);
         _lastScreenMsg[chatId] = promptMsg.MessageId;
+        state.FlowMessageIds.Add(promptMsg.MessageId);
     }
 
     private async Task HandleOtpInput(long chatId, long fromId, string otp, BotState state, CancellationToken ct)
@@ -583,7 +598,8 @@ public sealed class TelegramNotificationService : BackgroundService
         if (result.Expired)
         {
             _totp.StartChallenge(chatId, state.UserId, state.Purpose);
-            await _bot!.SendMessage(chatId: chatId, text: _loc.Get(chatId, "code_expired"), cancellationToken: ct);
+            var expiredMsg = await _bot!.SendMessage(chatId: chatId, text: _loc.Get(chatId, "code_expired"), cancellationToken: ct);
+            state.FlowMessageIds.Add(expiredMsg.MessageId);
             await PromptOtpCode(chatId, state, ct);
             return;
         }
@@ -598,11 +614,11 @@ public sealed class TelegramNotificationService : BackgroundService
         if (!result.Validated)
         {
             var remaining = result.RemainingAttempts;
-            await _bot!.SendMessage(chatId: chatId,
+            var errMsg = await _bot!.SendMessage(chatId: chatId,
                 text: _loc.Get(chatId, "invalid_code", ("remaining", remaining.ToString())),
                 parseMode: ParseMode.Markdown,
-                replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
                 cancellationToken: ct);
+            state.FlowMessageIds.Add(errMsg.MessageId);
             return;
         }
 
@@ -631,6 +647,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 ]),
                 cancellationToken: ct);
             _lastScreenMsg[chatId] = sentCodes.MessageId;
+            state.FlowMessageIds.Add(sentCodes.MessageId);
             return;
         }
 
@@ -783,4 +800,5 @@ class BotState
     public string Purpose { get; set; } = "";
     public string? RegistrationBackupCodes { get; set; }
     public int RegistrationQrMsgId { get; set; }
+    public List<int> FlowMessageIds { get; set; } = new();
 }
