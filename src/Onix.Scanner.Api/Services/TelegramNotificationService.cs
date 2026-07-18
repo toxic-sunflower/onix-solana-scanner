@@ -20,6 +20,7 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly LocalizationService _loc;
 
     private readonly ConcurrentDictionary<long, BotState> _states = new();
+    private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
 
     private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
 
@@ -170,11 +171,11 @@ public sealed class TelegramNotificationService : BackgroundService
         }
         else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
+            try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
+
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
             {
-                if (state.RegistrationQrMsgId > 0)
-                    try { await _bot!.DeleteMessage(chatId, state.RegistrationQrMsgId, ct); } catch { }
                 _totp.ClearChallenge(chatId);
                 _states.TryRemove(chatId, out _);
                 await HandleStart(chatId, fromId.Value, msg.From!, "", 0, ct);
@@ -375,12 +376,13 @@ public sealed class TelegramNotificationService : BackgroundService
 
             _totp.StartChallenge(chatId, user.Id, "auth");
             _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
-            await _bot!.SendMessage(
+            var otpMsg = await _bot!.SendMessage(
                 chatId: chatId,
                 text: _loc.Get(chatId, "enter_otp"),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
                 cancellationToken: ct);
+            _lastScreenMsg[chatId] = otpMsg.MessageId;
             return;
         }
 
@@ -390,6 +392,8 @@ public sealed class TelegramNotificationService : BackgroundService
             var langBtns = _loc.GetOtherLanguages(chatId)
                 .Select(l => InlineKeyboardButton.WithCallbackData(l.Label, $"lang_{l.Code}"))
                 .ToArray();
+
+            await DeletePreviousScreen(chatId, ct);
 
             var registerData = $"register_{userMsgId}";
             var keyboard = langBtns.Length > 0
@@ -401,12 +405,13 @@ public sealed class TelegramNotificationService : BackgroundService
                     [InlineKeyboardButton.WithCallbackData(_loc.Get(currentLang, "register_btn"), registerData)],
                   ]);
 
-            await _bot!.SendMessage(
+            var welcomeMsg = await _bot!.SendMessage(
                 chatId: chatId,
                 text: _loc.Get(currentLang, "welcome"),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: keyboard,
                 cancellationToken: ct);
+            _lastScreenMsg[chatId] = welcomeMsg.MessageId;
         }
         else
         {
@@ -438,6 +443,8 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _totp.StartChallenge(chatId, Guid.Empty, "register");
 
+        await DeletePreviousScreen(chatId, ct);
+
         await using var ms = new MemoryStream();
         using var qrGen = new QRCoder.QRCodeGenerator();
         using var qrCode = qrGen.CreateQrCode(qrUri, QRCoder.QRCodeGenerator.ECCLevel.Q);
@@ -454,6 +461,7 @@ public sealed class TelegramNotificationService : BackgroundService
             parseMode: ParseMode.Html,
             cancellationToken: ct);
 
+        _lastScreenMsg[chatId] = qrMsg.MessageId;
         if (_states.TryGetValue(chatId, out var s))
             s.RegistrationQrMsgId = qrMsg.MessageId;
     }
@@ -508,12 +516,14 @@ public sealed class TelegramNotificationService : BackgroundService
         }
 
         _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
-        await _bot!.SendMessage(
+        await DeletePreviousScreen(chatId, ct);
+        var otpMsg = await _bot!.SendMessage(
             chatId: chatId,
             text: _loc.Get(chatId, "enter_otp_for_link"),
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
             cancellationToken: ct);
+        _lastScreenMsg[chatId] = otpMsg.MessageId;
     }
 
     private async Task PromptOtpCode(long chatId, BotState state, CancellationToken ct)
@@ -525,12 +535,13 @@ public sealed class TelegramNotificationService : BackgroundService
             "link" => _loc.Get(chatId, "enter_otp_for_link"),
             _ => _loc.Get(chatId, "enter_otp"),
         };
-        await _bot!.SendMessage(
+        var promptMsg = await _bot!.SendMessage(
             chatId: chatId,
             text: text,
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
             cancellationToken: ct);
+        _lastScreenMsg[chatId] = promptMsg.MessageId;
     }
 
     private async Task HandleOtpInput(long chatId, long fromId, string otp, BotState state, CancellationToken ct)
@@ -609,12 +620,14 @@ public sealed class TelegramNotificationService : BackgroundService
 
             var backupCodes = state.RegistrationBackupCodes?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
 
+            await DeletePreviousScreen(chatId, ct);
+
             var codesMsg = $"{_loc.Get(lang, "backup_codes_title")}\n" +
                            string.Join("\n", backupCodes.Select(c => $"`{c}`")) +
                            $"\n\n{_loc.Get(lang, "reset_code_label", ("code", state.RegistrationResetCode!))}\n" +
                            _loc.Get(lang, "reset_code_hint");
 
-            await _bot!.SendMessage(
+            var sentCodes = await _bot!.SendMessage(
                 chatId: chatId,
                 text: codesMsg,
                 parseMode: ParseMode.Markdown,
@@ -623,6 +636,7 @@ public sealed class TelegramNotificationService : BackgroundService
                     [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "cancel"), "cancel_registration")],
                 ]),
                 cancellationToken: ct);
+            _lastScreenMsg[chatId] = sentCodes.MessageId;
             return;
         }
 
@@ -668,17 +682,25 @@ public sealed class TelegramNotificationService : BackgroundService
 
     // ── Helpers ──
 
+    private async Task DeletePreviousScreen(long chatId, CancellationToken ct)
+    {
+        if (_lastScreenMsg.TryRemove(chatId, out var msgId))
+            try { await _bot!.DeleteMessage(chatId, msgId, ct); } catch { }
+    }
+
     private async Task ShowMainMenu(long chatId, CancellationToken ct)
     {
         var keyboard = new InlineKeyboardMarkup([
             [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "get_login_link"), "get_link")],
         ]);
 
-        await _bot!.SendMessage(
+        await DeletePreviousScreen(chatId, ct);
+        var msg = await _bot!.SendMessage(
             chatId: chatId,
             text: _loc.Get(chatId, "main_menu"),
             replyMarkup: keyboard,
             cancellationToken: ct);
+        _lastScreenMsg[chatId] = msg.MessageId;
     }
 
     private async Task ShowRegistrationBackupCodes(long chatId, Shared.Models.User user, CancellationToken ct)
@@ -699,7 +721,7 @@ public sealed class TelegramNotificationService : BackgroundService
                        $"\n\n{_loc.Get(lang, "reset_code_label", ("code", resetCode))}\n" +
                        _loc.Get(lang, "reset_code_hint");
 
-        await _bot!.SendMessage(
+        var sent = await _bot!.SendMessage(
             chatId: chatId,
             text: codesMsg,
             parseMode: ParseMode.Markdown,
@@ -708,17 +730,19 @@ public sealed class TelegramNotificationService : BackgroundService
                 [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "cancel"), "cancel_registration")],
             ]),
             cancellationToken: ct);
+        _lastScreenMsg[chatId] = sent.MessageId;
     }
 
     private async Task ShowRegistrationRequired(long chatId, CancellationToken ct)
     {
-        await _bot!.SendMessage(
+        var msg = await _bot!.SendMessage(
             chatId: chatId,
             text: _loc.Get(chatId, "registration_required"),
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup(
                 InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "register_btn"), "register_0")),
             cancellationToken: ct);
+        _lastScreenMsg[chatId] = msg.MessageId;
     }
 
     // ── Signal sending ──
