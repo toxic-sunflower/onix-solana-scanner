@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Onix.Scanner.Infrastructure.Data;
@@ -11,9 +12,11 @@ using Onix.Scanner.Infrastructure.Data;
 namespace Onix.Scanner.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260717011623_AddTwoFactorResetCode")]
+    partial class AddTwoFactorResetCode
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -354,9 +357,6 @@ namespace Onix.Scanner.Infrastructure.Migrations
                     b.Property<bool>("Is2FAEnabled")
                         .HasColumnType("boolean");
 
-                    b.Property<string>("Language")
-                        .HasColumnType("text");
-
                     b.Property<DateTime?>("LastLoginAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -366,13 +366,6 @@ namespace Onix.Scanner.Infrastructure.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasDefaultValue("User");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
-                        .HasDefaultValue("new");
 
                     b.Property<long>("TelegramId")
                         .HasColumnType("bigint");

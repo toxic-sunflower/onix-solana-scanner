@@ -171,9 +171,6 @@ public sealed class TelegramNotificationService : BackgroundService
         }
         else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
-            _logger.LogInformation("HandleMessage AwaitingOtp: purpose={Purpose}, text={Text}", state.Purpose, text);
-            try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
-
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
             {
@@ -305,7 +302,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 {
                     var cancelRepo = cancelScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
                     var pendingUser = await cancelRepo.GetByTelegramIdAsync(fromId, ct);
-                    if (pendingUser is not null && !pendingUser.Is2FAEnabled)
+                    if (pendingUser is not null && pendingUser.Status != "active")
                         await cancelRepo.DeleteAsync(pendingUser.Id, ct);
                 }
                 _states.TryRemove(chatId.Value, out _);
@@ -321,7 +318,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 {
                     var otpRepo = otpScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
                     var pendingUser = await otpRepo.GetByTelegramIdAsync(fromId, ct);
-                    if (pendingUser is not null && !pendingUser.Is2FAEnabled)
+                    if (pendingUser is not null && pendingUser.Status != "active")
                         await otpRepo.DeleteAsync(pendingUser.Id, ct);
                 }
                 await HandleStart(chatId.Value, fromId, query.From!, "", 0, ct);
@@ -341,13 +338,36 @@ public sealed class TelegramNotificationService : BackgroundService
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
         var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
 
-        // Resume pending registration
-        if (user is not null && !user.Is2FAEnabled && user.TwoFactorSecret is not null)
+        if (user is not null)
         {
             if (user.Language is not null)
                 _loc.SetLanguage(chatId, user.Language);
-            await ShowRegistrationBackupCodes(chatId, user, ct);
-            return;
+
+            switch (user.Status)
+            {
+                case "new":
+                    await StartRegistration(chatId, fromId, ct, user);
+                    return;
+                case "otp":
+                    await ShowRegistrationBackupCodes(chatId, user, ct);
+                    return;
+                case "active":
+                    if (payload.StartsWith("auth_"))
+                    {
+                        _totp.StartChallenge(chatId, user.Id, "auth");
+                        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
+                        var otpMsg = await _bot!.SendMessage(
+                            chatId: chatId,
+                            text: _loc.Get(chatId, "enter_otp"),
+                            parseMode: ParseMode.Markdown,
+                            replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_otp")),
+                            cancellationToken: ct);
+                        _lastScreenMsg[chatId] = otpMsg.MessageId;
+                        return;
+                    }
+                    await ShowMainMenu(chatId, ct);
+                    return;
+            }
         }
 
         if (payload.StartsWith("auth_"))
@@ -360,13 +380,14 @@ public sealed class TelegramNotificationService : BackgroundService
                     TelegramUsername = tgUser.Username,
                     DisplayName = tgUser.FirstName,
                     LastLoginAt = DateTime.UtcNow,
+                    Status = "active",
                     Is2FAEnabled = false,
                 };
                 user = await userRepo.CreateAsync(user, ct);
                 await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
             }
 
-            if (!user.Is2FAEnabled)
+            if (user.Status != "active")
             {
                 await ShowRegistrationRequired(chatId, ct);
                 return;
@@ -376,7 +397,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 _loc.SetLanguage(chatId, user.Language);
 
             _totp.StartChallenge(chatId, user.Id, "auth");
-            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth", ValidationSecret = user.TwoFactorSecret, ValidationBackupHashes = user.TwoFactorBackupCodes };
+            _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "auth" };
             var otpMsg = await _bot!.SendMessage(
                 chatId: chatId,
                 text: _loc.Get(chatId, "enter_otp"),
@@ -424,27 +445,55 @@ public sealed class TelegramNotificationService : BackgroundService
 
     // ── Registration flow ──
 
-    private async Task StartRegistration(long chatId, long fromId, CancellationToken ct)
+    private async Task StartRegistration(long chatId, long fromId, CancellationToken ct,
+        Shared.Models.User? existingUser = null)
     {
         var secret = _totp.GenerateSecret();
         var qrUri = _totp.GenerateQrUri(secret, fromId.ToString());
         var backupCodes = _totp.GenerateBackupCodes(8);
         var resetCode = Guid.NewGuid().ToString("N")[..12];
+        var lang = _loc.GetLanguage(chatId);
+
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+
+        Shared.Models.User user;
+        if (existingUser is not null)
+        {
+            existingUser.Status = "new";
+            existingUser.TwoFactorSecret = secret;
+            existingUser.TwoFactorBackupCodes = string.Join(",", backupCodes.Select(c => c.hash));
+            existingUser.TwoFactorResetCode = resetCode;
+            existingUser.Is2FAEnabled = false;
+            existingUser.Language = lang;
+            await userRepo.UpdateAsync(existingUser, ct);
+            user = existingUser;
+        }
+        else
+        {
+            user = new Shared.Models.User
+            {
+                TelegramId = fromId,
+                DisplayName = fromId.ToString(),
+                Status = "new",
+                Language = lang,
+                TwoFactorSecret = secret,
+                TwoFactorBackupCodes = string.Join(",", backupCodes.Select(c => c.hash)),
+                TwoFactorResetCode = resetCode,
+            };
+            user = await userRepo.CreateAsync(user, ct);
+            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+        }
 
         _states[chatId] = new BotState
         {
             State = BotStep.AwaitingOtp,
-            UserId = Guid.Empty,
+            UserId = user.Id,
             Purpose = "register",
-            ValidationSecret = secret,
-            ValidationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
-            RegistrationSecret = secret,
-            RegistrationBackupHashes = string.Join(",", backupCodes.Select(c => c.hash)),
             RegistrationBackupCodes = string.Join(",", backupCodes.Select(c => c.plain)),
-            RegistrationResetCode = resetCode,
         };
 
-        _totp.StartChallenge(chatId, Guid.Empty, "register");
+        _totp.StartChallenge(chatId, user.Id, "register");
 
         await DeletePreviousScreen(chatId, ct);
 
@@ -475,12 +524,13 @@ public sealed class TelegramNotificationService : BackgroundService
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
 
         var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
-        if (user is null || user.Is2FAEnabled)
+        if (user is null || user.Status == "active")
         {
             await ShowMainMenu(chatId, ct);
             return;
         }
 
+        user.Status = "active";
         user.Is2FAEnabled = true;
         await userRepo.UpdateAsync(user, ct);
 
@@ -503,9 +553,9 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        if (!user.Is2FAEnabled)
+        if (user.Status != "active")
         {
-            await StartRegistration(chatId, fromId, ct);
+            await StartRegistration(chatId, fromId, ct, user);
             return;
         }
 
@@ -518,9 +568,7 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link", ValidationSecret = user.TwoFactorSecret, ValidationBackupHashes = user.TwoFactorBackupCodes };
-        _logger.LogInformation("PromptOtpForLink: userId={UserId}, chatId={ChatId}, is2fa={Is2FA}, hasSecret={HasSecret}",
-            user.Id, chatId, user.Is2FAEnabled, user.TwoFactorSecret is not null);
+        _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
         await DeletePreviousScreen(chatId, ct);
         var otpMsg = await _bot!.SendMessage(
             chatId: chatId,
@@ -564,6 +612,7 @@ public sealed class TelegramNotificationService : BackgroundService
         if (user?.TwoFactorResetCode is not null &&
             otp.Equals(user.TwoFactorResetCode, StringComparison.OrdinalIgnoreCase))
         {
+            user.Status = "new";
             user.Is2FAEnabled = false;
             user.TwoFactorSecret = null;
             user.TwoFactorBackupCodes = null;
@@ -577,7 +626,7 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        var result = _totp.TryValidateOtp(chatId, otp, state.ValidationSecret, state.ValidationBackupHashes);
+        var result = _totp.TryValidateOtp(chatId, otp, user?.TwoFactorSecret, user?.TwoFactorBackupCodes);
 
         if (result.Expired)
         {
@@ -606,37 +655,26 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (state.Purpose == "register")
         {
-            var lang = _loc.GetLanguage(chatId);
-            user = new Shared.Models.User
-            {
-                TelegramId = fromId,
-                DisplayName = fromId.ToString(),
-                LastLoginAt = DateTime.UtcNow,
-                Is2FAEnabled = false,
-                TwoFactorSecret = state.RegistrationSecret,
-                TwoFactorBackupCodes = state.RegistrationBackupHashes,
-                TwoFactorResetCode = state.RegistrationResetCode,
-                Language = lang,
-            };
-            user = await userRepo.CreateAsync(user, ct);
-            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+            user!.Status = "otp";
+            user!.Language = _loc.GetLanguage(chatId);
+            await userRepo.UpdateAsync(user, ct);
 
             var backupCodes = state.RegistrationBackupCodes?.Split(',', StringSplitOptions.RemoveEmptyEntries) ?? [];
 
             await DeletePreviousScreen(chatId, ct);
 
-            var codesMsg = $"{_loc.Get(lang, "backup_codes_title")}\n" +
+            var codesMsg = $"{_loc.Get(chatId, "backup_codes_title")}\n" +
                            string.Join("\n", backupCodes.Select(c => $"`{c}`")) +
-                           $"\n\n{_loc.Get(lang, "reset_code_label", ("code", state.RegistrationResetCode!))}\n" +
-                           _loc.Get(lang, "reset_code_hint");
+                           $"\n\n{_loc.Get(chatId, "reset_code_label", ("code", user.TwoFactorResetCode!))}\n" +
+                           _loc.Get(chatId, "reset_code_hint");
 
             var sentCodes = await _bot!.SendMessage(
                 chatId: chatId,
                 text: codesMsg,
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup([
-                    [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_codes_btn"), "confirm_registration")],
-                    [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "cancel"), "cancel_registration")],
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "register_codes_btn"), "confirm_registration")],
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_registration")],
                 ]),
                 cancellationToken: ct);
             _lastScreenMsg[chatId] = sentCodes.MessageId;
@@ -790,11 +828,6 @@ class BotState
     public BotStep State { get; set; }
     public Guid UserId { get; set; }
     public string Purpose { get; set; } = "";
-    public string? ValidationSecret { get; set; }
-    public string? ValidationBackupHashes { get; set; }
-    public string? RegistrationSecret { get; set; }
-    public string? RegistrationBackupHashes { get; set; }
     public string? RegistrationBackupCodes { get; set; }
-    public string? RegistrationResetCode { get; set; }
     public int RegistrationQrMsgId { get; set; }
 }

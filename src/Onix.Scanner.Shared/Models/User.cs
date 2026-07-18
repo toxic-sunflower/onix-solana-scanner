@@ -12,6 +12,7 @@ public class User
     public DateTime? AuthTokenExpiresAt { get; set; }
     public UserRole Role { get; set; }
     public int TokenVersion { get; set; }
+    public string Status { get; set; } = "new";
     public bool Is2FAEnabled { get; set; }
     public string? TwoFactorSecret { get; set; }
     public string? TwoFactorBackupCodes { get; set; }

@@ -54,6 +54,7 @@ public class TwoFactorController : ControllerBase
         var backupCodes = _totp.GenerateBackupCodes(8);
         var hashedCodes = string.Join(",", backupCodes.Select(c => c.hash));
 
+        user.Status = "active";
         user.Is2FAEnabled = true;
         user.TwoFactorSecret = request.Secret;
         user.TwoFactorBackupCodes = hashedCodes;
@@ -73,6 +74,7 @@ public class TwoFactorController : ControllerBase
         if (!_totp.ValidateCode(user.TwoFactorSecret!, request.Code))
             return BadRequest(new { error = "invalid_code" });
 
+        user.Status = "new";
         user.Is2FAEnabled = false;
         user.TwoFactorSecret = null;
         user.TwoFactorBackupCodes = null;

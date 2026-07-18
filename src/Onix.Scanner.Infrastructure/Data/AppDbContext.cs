@@ -64,7 +64,8 @@ public class AppDbContext : DbContext
             e.ToTable("users");
             e.HasKey(x => x.Id);
             e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
-            e.Property(x => x.TelegramId).IsRequired();
+                e.Property(x => x.TelegramId).IsRequired();
+            e.Property(x => x.Status).HasMaxLength(10).HasDefaultValue("new");
             e.Property(x => x.Role).HasMaxLength(20).HasConversion<string>().HasDefaultValue(UserRole.User);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
