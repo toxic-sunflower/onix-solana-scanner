@@ -173,9 +173,11 @@ public sealed class TelegramNotificationService : BackgroundService
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
             {
+                if (state.RegistrationQrMsgId > 0)
+                    try { await _bot!.DeleteMessage(chatId, state.RegistrationQrMsgId, ct); } catch { }
                 _totp.ClearChallenge(chatId);
                 _states.TryRemove(chatId, out _);
-                await ShowMainMenu(chatId, ct);
+                await HandleStart(chatId, fromId.Value, msg.From!, "", 0, ct);
                 return;
             }
 
@@ -308,9 +310,19 @@ public sealed class TelegramNotificationService : BackgroundService
                 await HandleStart(chatId.Value, fromId, query.From!, "", 0, ct);
                 break;
             case "cancel_otp":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                if (_states.TryGetValue(chatId.Value, out var otpState) && otpState.RegistrationQrMsgId > 0)
+                    try { await _bot!.DeleteMessage(chatId.Value, otpState.RegistrationQrMsgId, ct); } catch { }
                 _totp.ClearChallenge(chatId.Value);
                 _states.TryRemove(chatId.Value, out _);
-                await ShowMainMenu(chatId.Value, ct);
+                using (var otpScope = _services.CreateScope())
+                {
+                    var otpRepo = otpScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+                    var pendingUser = await otpRepo.GetByTelegramIdAsync(fromId, ct);
+                    if (pendingUser is not null && !pendingUser.Is2FAEnabled)
+                        await otpRepo.DeleteAsync(pendingUser.Id, ct);
+                }
+                await HandleStart(chatId.Value, fromId, query.From!, "", 0, ct);
                 break;
             case "main_menu":
                 _states.TryRemove(chatId.Value, out _);
@@ -435,12 +447,15 @@ public sealed class TelegramNotificationService : BackgroundService
         ms.Position = 0;
 
         var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}\n<a href=\"{_appUrl}/app?name=google\">Google Authenticator</a>\n<a href=\"{_appUrl}/app?name=authy\">Authy</a>\n<a href=\"{_appUrl}/app?name=microsoft\">Microsoft Authenticator</a>\n<a href=\"{_appUrl}/app?name=2fas\">2FAS</a>";
-        await _bot!.SendPhoto(
+        var qrMsg = await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
             caption: caption,
             parseMode: ParseMode.Html,
             cancellationToken: ct);
+
+        if (_states.TryGetValue(chatId, out var s))
+            s.RegistrationQrMsgId = qrMsg.MessageId;
     }
 
     private async Task CompleteRegistration(long chatId, long fromId, CancellationToken ct)
@@ -752,4 +767,5 @@ class BotState
     public string? RegistrationBackupHashes { get; set; }
     public string? RegistrationBackupCodes { get; set; }
     public string? RegistrationResetCode { get; set; }
+    public int RegistrationQrMsgId { get; set; }
 }
