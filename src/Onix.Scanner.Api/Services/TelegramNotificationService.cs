@@ -171,6 +171,7 @@ public sealed class TelegramNotificationService : BackgroundService
         }
         else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
+            _logger.LogInformation("HandleMessage AwaitingOtp: purpose={Purpose}, text={Text}", state.Purpose, text);
             try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
 
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
@@ -516,6 +517,8 @@ public sealed class TelegramNotificationService : BackgroundService
         }
 
         _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
+        _logger.LogInformation("PromptOtpForLink: userId={UserId}, chatId={ChatId}, is2fa={Is2FA}, hasSecret={HasSecret}",
+            user.Id, chatId, user.Is2FAEnabled, user.TwoFactorSecret is not null);
         await DeletePreviousScreen(chatId, ct);
         var otpMsg = await _bot!.SendMessage(
             chatId: chatId,
@@ -574,7 +577,14 @@ public sealed class TelegramNotificationService : BackgroundService
 
         var secret = state.Purpose == "register" ? state.RegistrationSecret : user!.TwoFactorSecret;
         var backup = state.Purpose == "register" ? state.RegistrationBackupHashes : user!.TwoFactorBackupCodes;
+
+        _logger.LogInformation("HandleOtpInput: purpose={Purpose}, userIsNull={UserNull}, secretIsNull={SecretNull}, backupIsNull={BackupNull}",
+            state.Purpose, user is null, secret is null, backup is null);
+
         var result = _totp.TryValidateOtp(chatId, otp, secret, backup);
+
+        _logger.LogInformation("TryValidateOtp: expired={Expired}, blocked={Blocked}, validated={Validated}, remaining={Remaining}",
+            result.Expired, result.Blocked, result.Validated, result.RemainingAttempts);
 
         if (result.Expired)
         {
