@@ -29,6 +29,15 @@ public class UserRepository : IUserRepository
         await _db.SaveChangesAsync(ct);
     }
 
+    public async Task CompleteRegistrationAsync(Guid userId, CancellationToken ct = default)
+    {
+        await _db.Users.Where(u => u.Id == userId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(u => u.Status, "active")
+                .SetProperty(u => u.Is2FAEnabled, true)
+                .SetProperty(u => u.UpdatedAt, DateTime.UtcNow), ct);
+    }
+
     public async Task DeleteAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);

@@ -482,9 +482,7 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        user.Status = "active";
-        user.Is2FAEnabled = true;
-        await userRepo.UpdateAsync(user, ct);
+        await userRepo.CompleteRegistrationAsync(user.Id, ct);
 
         _states.TryRemove(chatId, out _);
 
