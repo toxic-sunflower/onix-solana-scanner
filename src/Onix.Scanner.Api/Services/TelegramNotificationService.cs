@@ -342,6 +342,8 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (user is not null)
         {
+            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+
             if (user.Language is not null)
                 _loc.SetLanguage(chatId, user.Language);
 
