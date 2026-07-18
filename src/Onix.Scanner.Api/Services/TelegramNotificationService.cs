@@ -289,6 +289,7 @@ public sealed class TelegramNotificationService : BackgroundService
         switch (data)
         {
             case "confirm_registration":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
                 await CompleteRegistration(chatId.Value, fromId, ct);
                 break;
             case "get_link":
@@ -459,22 +460,6 @@ public sealed class TelegramNotificationService : BackgroundService
 
         _states.TryRemove(chatId, out _);
 
-        var authToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
-        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = hash,
-            LastJti = jti,
-            ExpiresAt = DateTime.UtcNow.AddDays(30),
-        }, ct);
-
-        var linkLang = _loc.GetLanguage(chatId);
-        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}&lang={linkLang}";
-
-        await _bot!.SendMessage(chatId: chatId,
-            text: _loc.Get(chatId, "login_link", ("link", link)),
-            cancellationToken: ct);
         await ShowMainMenu(chatId, ct);
     }
 
