@@ -171,6 +171,8 @@ public sealed class TelegramNotificationService : BackgroundService
         }
         else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
+            try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
+
             if (text.Equals("cancel", StringComparison.OrdinalIgnoreCase) ||
                 text.Equals("отмена", StringComparison.OrdinalIgnoreCase))
             {
@@ -498,6 +500,7 @@ public sealed class TelegramNotificationService : BackgroundService
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
             caption: caption,
             parseMode: ParseMode.Html,
+            replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "cancel"), "cancel_registration")),
             cancellationToken: ct);
 
         _lastScreenMsg[chatId] = qrMsg.MessageId;
