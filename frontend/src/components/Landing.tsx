@@ -1,6 +1,15 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function Landing({ onToken }: { onToken: (token: string) => void }) {
+  const [botUsername, setBotUsername] = useState('OnixSolanaScanner_Bot');
+
+  useEffect(() => {
+    fetch('/api/v1/config')
+      .then(r => r.json())
+      .then(c => { if (c.botUsername) setBotUsername(c.botUsername); })
+      .catch(() => {});
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
@@ -21,7 +30,7 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
         </p>
 
         <a
-          href="https://t.me/OnixSolanaScanner_Bot"
+          href={`https://t.me/${botUsername}`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block px-6 py-3 bg-[#f59e0b] hover:bg-[#d97706] rounded-lg text-black font-medium transition-colors"
