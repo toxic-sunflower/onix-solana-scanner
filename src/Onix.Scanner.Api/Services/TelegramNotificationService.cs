@@ -269,6 +269,8 @@ public sealed class TelegramNotificationService : BackgroundService
                 await langUserRepo.UpdateAsync(langUser, ct);
             }
 
+            await SetMenuButtonAsync(chatId.Value, ct);
+
             var otherLangBtns = _loc.GetOtherLanguages(chatId.Value)
                 .Select(l => InlineKeyboardButton.WithCallbackData(l.Label, $"lang_{l.Code}"))
                 .ToArray();
@@ -370,6 +372,17 @@ public sealed class TelegramNotificationService : BackgroundService
 
     // ── /start handler ──
 
+    private async Task SetMenuButtonAsync(long chatId, CancellationToken ct)
+    {
+        var lang = _loc.GetLanguage(chatId);
+        var text = lang.StartsWith("ru") ? "Открыть сканер" : "Open Scanner";
+        await _bot!.SetChatMenuButton(chatId, new MenuButtonWebApp
+        {
+            Text = text,
+            WebApp = new WebAppInfo { Url = $"{_appUrl.TrimEnd('/')}" },
+        }, ct);
+    }
+
     private async Task HandleStart(long chatId, long fromId, User tgUser, string payload, int userMsgId, CancellationToken ct)
     {
         using var scope = _services.CreateScope();
@@ -381,7 +394,10 @@ public sealed class TelegramNotificationService : BackgroundService
             await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
 
             if (user.Language is not null)
+            {
                 _loc.SetLanguage(chatId, user.Language);
+                await SetMenuButtonAsync(chatId, ct);
+            }
 
             switch (user.Status)
             {
@@ -427,7 +443,10 @@ public sealed class TelegramNotificationService : BackgroundService
         else
         {
             if (user.Language is not null)
+            {
                 _loc.SetLanguage(chatId, user.Language);
+                await SetMenuButtonAsync(chatId, ct);
+            }
             await ShowMainMenu(chatId, ct);
         }
     }
