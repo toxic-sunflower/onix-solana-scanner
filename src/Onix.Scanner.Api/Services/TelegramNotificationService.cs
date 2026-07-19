@@ -699,10 +699,6 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             var loginToken = await userRepo.CreateLoginTokenAsync(user!.Id, TimeSpan.FromMinutes(5), ct);
 
-            foreach (var mid in state.FlowMessageIds)
-                try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
-            _states.TryRemove(chatId, out _);
-
             var link = $"{_appUrl}/login/{loginToken.Token}";
 
             var linkKey = result.UsedBackup ? "login_link_backup" : "login_link";
@@ -720,8 +716,15 @@ public sealed class TelegramNotificationService : BackgroundService
             _logger.LogError(ex, "Failed to generate login link for user {UserId}", user!.Id);
             await _bot!.SendMessage(chatId: chatId,
                 text: _loc.Get(chatId, "error_generating_link"),
+                replyMarkup: new InlineKeyboardMarkup([
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "main_menu"), "main_menu")],
+                ]),
                 cancellationToken: ct);
         }
+
+        foreach (var mid in state.FlowMessageIds)
+            try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
+        _states.TryRemove(chatId, out _);
     }
 
     // ── Language detection ──
