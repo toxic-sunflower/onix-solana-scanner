@@ -21,7 +21,7 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
         </p>
 
         <a
-          href="https://t.me/OnixSolanaScanner_Bot"
+          href={`https://t.me/${import.meta.env.VITE_BOT_USERNAME ?? 'OnixSolanaScanner_Bot'}`}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-block px-6 py-3 bg-[#f59e0b] hover:bg-[#d97706] rounded-lg text-black font-medium transition-colors"
