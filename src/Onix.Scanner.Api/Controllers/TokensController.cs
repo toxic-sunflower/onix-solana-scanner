@@ -47,18 +47,34 @@ public class TokensController : ControllerBase
 
     [HttpGet("search")]
     public async Task<ActionResult<List<TokenSearchDto>>> Search(
-        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 50)
+        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 200)
     {
         var tokens = await _tokenRepo.SearchAsync(q, cexOnly, limit);
-        return Ok(tokens.Select(t => new TokenSearchDto
+        var result = tokens.Select(t =>
         {
-            Id = t.Id,
-            Symbol = t.Symbol,
-            Name = t.Name,
-            SolanaMint = t.SolanaMint,
-            Decimals = t.Decimals,
-            IsAvailableOnCex = t.IsAvailableOnCex,
-        }).ToList());
+            var dto = new TokenSearchDto
+            {
+                Id = t.Id,
+                Symbol = t.Symbol,
+                Name = t.Name,
+                SolanaMint = t.SolanaMint,
+                Decimals = t.Decimals,
+                IsAvailableOnCex = t.IsAvailableOnCex,
+            };
+            if (_snapshotPool.TryGetIndex(t.Id, out var idx))
+            {
+                var snap = _snapshotPool.ReadSnapshot(idx);
+                dto.BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : null;
+                dto.JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : null;
+                dto.SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
+                dto.Status = t.Status;
+                dto.LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
+                    ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
+                    : null;
+            }
+            return dto;
+        }).ToList();
+        return Ok(result);
     }
 
     [HttpGet]
