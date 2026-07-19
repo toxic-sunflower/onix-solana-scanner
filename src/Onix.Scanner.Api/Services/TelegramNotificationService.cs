@@ -709,6 +709,9 @@ public sealed class TelegramNotificationService : BackgroundService
             await _bot!.SendMessage(chatId: chatId,
                 text: _loc.Get(chatId, linkKey, ("link", link)),
                 parseMode: ParseMode.Markdown,
+                replyMarkup: new InlineKeyboardMarkup([
+                    [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "main_menu"), "main_menu")],
+                ]),
                 cancellationToken: ct);
         }
         catch (Exception ex)
