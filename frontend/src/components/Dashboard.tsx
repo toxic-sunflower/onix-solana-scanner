@@ -4,6 +4,14 @@ import { authFetch } from '../lib/auth';
 import connection, { startConnection } from '../lib/signalr';
 import TokenCard from './TokenCard';
 
+interface TokenInfo {
+  id: string;
+  symbol: string;
+  name?: string;
+  isAvailableOnCex: boolean;
+  spreadPct?: number | null;
+}
+
 interface Props {
   onNavigate: (page: string, tokenId?: string) => void;
 }
@@ -20,7 +28,9 @@ const sortLabels: Record<SortKey, string> = {
 
 export default function Dashboard({ onNavigate }: Props) {
   const [tokens, setTokens] = useState<UserTokenDto[]>([]);
-  const [search, setSearch] = useState('');
+  const [addSearch, setAddSearch] = useState('');
+  const [addResults, setAddResults] = useState<TokenInfo[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
   const [sorts, setSorts] = useState<SortCriterion[]>([{ key: 'hasspread', dir: 'desc' }, { key: 'spread', dir: 'desc' }]);
   const [connected, setConnected] = useState(false);
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
@@ -82,9 +92,39 @@ export default function Dashboard({ onNavigate }: Props) {
     return () => { connection.off('token.quote'); connection.off('token.status'); };
   }, []);
 
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      const res = await authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(addSearch)}&limit=200`);
+      if (res.ok) setAddResults(await res.json());
+    }, 150);
+    return () => clearTimeout(t);
+  }, [addSearch]);
+
+  const doAddToken = async (id: string) => {
+    setAddingId(id);
+    await authFetch('/api/v1/user-tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tokenId: id }),
+    });
+    setAddingId(null);
+    setAddSearch('');
+    setAddResults([]);
+    loadTokens();
+  };
+
+  const spreadColor = (pct: number | null | undefined) => {
+    if (pct == null) return 'text-[#64748b]';
+    if (pct > 5) return 'text-[#22c55e]';
+    if (pct > 2) return 'text-[#84cc16]';
+    if (pct > 0) return 'text-[#eab308]';
+    if (pct < -2) return 'text-[#ef4444]';
+    if (pct < 0) return 'text-[#f97316]';
+    return 'text-[#64748b]';
+  };
+
   const filtered = useMemo(() => {
-    let result = tokens.filter(t =>
-      t.symbol.toLowerCase().includes(search.toLowerCase()));
+    let result = [...tokens];
 
     result.sort((a, b) => {
       for (const s of sorts) {
@@ -103,7 +143,7 @@ export default function Dashboard({ onNavigate }: Props) {
     });
 
     return result;
-  }, [tokens, search, sorts]);
+  }, [tokens, sorts]);
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -112,15 +152,7 @@ export default function Dashboard({ onNavigate }: Props) {
           <div className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-[#22c55e]' : 'bg-[#f59e0b] shimmer'}`} />
           <h2 className="text-lg font-bold text-[#f1f5f9]">Dashboard</h2>
         </div>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Search token..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="px-3 py-1.5 bg-[#16171d] border border-[#2a2b36] rounded text-sm w-44 text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] transition-colors"
-          />
-        </div>
+        <div className="flex gap-2" />
       </div>
 
       <div className="flex gap-1.5 mb-4 flex-wrap items-center">
@@ -145,11 +177,45 @@ export default function Dashboard({ onNavigate }: Props) {
         <span className="text-xs text-[#64748b] ml-auto">{tokens.length} token{tokens.length !== 1 ? 's' : ''}</span>
       </div>
 
+      <div className="relative mb-4">
+        <input type="text" placeholder="Add token..."
+          value={addSearch} onChange={e => setAddSearch(e.target.value)}
+          className="w-full px-3 py-2 bg-[#16171d] border border-[#2a2b36] rounded text-sm text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] transition-colors" />
+        {addSearch && addResults.length > 0 && (
+          <div className="absolute left-0 right-0 top-full mt-1 bg-[#1e1f28] border border-[#2a2b36] rounded-lg shadow-xl z-50 max-h-72 overflow-y-auto">
+            {addResults.filter(t => t.isAvailableOnCex).map(t => {
+              const tracked = tokens.some(mt => mt.id === t.id);
+              return (
+                <div key={t.id}
+                  className="flex items-center justify-between px-3 py-2 border-b border-[#2a2b36] last:border-0 hover:bg-[#2a2b36] transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-sm font-semibold text-[#f1f5f9]">{t.symbol}</span>
+                    {t.spreadPct != null && t.spreadPct > 0 && (
+                      <span className={`text-xs font-medium ${spreadColor(t.spreadPct)}`}>
+                        {t.spreadPct > 0 ? '+' : ''}{t.spreadPct.toFixed(2)}%
+                      </span>
+                    )}
+                  </div>
+                  {tracked ? (
+                    <span className="text-xs text-[#22c55e] font-medium">✓ Tracked</span>
+                  ) : (
+                    <button onClick={() => doAddToken(t.id)}
+                      className="px-2.5 py-1 text-xs font-medium rounded bg-[#d97706] text-black hover:bg-[#b45309] transition-colors whitespace-nowrap">
+                      {addingId === t.id ? '...' : '+Add'}
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {tokens.length === 0 && (
-        <div className="text-center mt-16">
+        <div className="text-center mt-8">
           <div className="text-4xl mb-3 text-[#2a2b36]">⟐</div>
           <p className="text-[#64748b] mb-1">No tokens tracked yet</p>
-          <p className="text-xs text-[#475569]">Go to Settings to add tokens</p>
+          <p className="text-xs text-[#475569]">Search and add tokens above</p>
         </div>
       )}
 
@@ -163,9 +229,6 @@ export default function Dashboard({ onNavigate }: Props) {
         ))}
       </div>
 
-      {tokens.length > 0 && filtered.length === 0 && (
-        <p className="text-center text-[#64748b] mt-8 text-sm">No tokens matching "{search}"</p>
-      )}
     </div>
   );
 }
