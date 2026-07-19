@@ -354,13 +354,23 @@ public sealed class TelegramNotificationService : BackgroundService
 
     private async Task SetMenuButtonAsync(long chatId, CancellationToken ct)
     {
-        var lang = _loc.GetLanguage(chatId);
-        var text = lang.StartsWith("ru") ? "Открыть сканер" : "Open Scanner";
-        await _bot!.SetChatMenuButton(chatId, new MenuButtonWebApp
+        try
         {
-            Text = text,
-            WebApp = new WebAppInfo { Url = $"{_appUrl.TrimEnd('/')}" },
-        }, ct);
+            var lang = _loc.GetLanguage(chatId);
+            var text = lang.StartsWith("ru") ? "Открыть сканер" : "Open Scanner";
+            var url = _appUrl.TrimEnd('/');
+            if (!url.StartsWith("http://") && !url.StartsWith("https://"))
+                url = "https://" + url;
+            await _bot!.SetChatMenuButton(chatId, new MenuButtonWebApp
+            {
+                Text = text,
+                WebApp = new WebAppInfo { Url = url },
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to set menu button for chat {ChatId}", chatId);
+        }
     }
 
     private async Task HandleStart(long chatId, long fromId, User tgUser, string payload, int userMsgId, CancellationToken ct)
