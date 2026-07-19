@@ -8,6 +8,7 @@ public class TokenSearchDto
     public string SolanaMint { get; set; } = string.Empty;
     public int Decimals { get; set; }
     public bool IsAvailableOnCex { get; set; }
+    public decimal QuoteAmount { get; set; }
     public decimal? BingxAskPrice { get; set; }
     public decimal? JupiterBuyPrice { get; set; }
     public decimal? SpreadPct { get; set; }
