@@ -707,9 +707,10 @@ public sealed class TelegramNotificationService : BackgroundService
 
             var linkKey = result.UsedBackup ? "login_link_backup" : "login_link";
             await _bot!.SendMessage(chatId: chatId,
-                text: _loc.Get(chatId, linkKey, ("link", link)),
+                text: _loc.Get(chatId, linkKey),
                 parseMode: ParseMode.Markdown,
                 replyMarkup: new InlineKeyboardMarkup([
+                    [InlineKeyboardButton.WithUrl(_loc.Get(chatId, "login_button"), link)],
                     [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "main_menu"), "main_menu")],
                 ]),
                 cancellationToken: ct);
