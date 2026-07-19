@@ -33,7 +33,7 @@ jobs:
             TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
             TELEGRAM_BOT_USERNAME=OnixSolanaScanner_Bot
             ENCRYPTION_KEY=$ENCRYPTION_KEY
-            APP_URL=$APP_URL
+            APP_URL=$(echo "$APP_URL" | xargs)
             EOF
 
             docker compose up -d --build
