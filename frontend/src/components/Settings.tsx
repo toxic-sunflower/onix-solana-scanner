@@ -89,6 +89,10 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     return () => clearTimeout(t);
   }, [search, searchTokens]);
 
+  useEffect(() => {
+    searchTokens('');
+  }, [searchTokens]);
+
   const addToken = async (tokenId: string) => {
     setAdding(tokenId);
     await authFetch('/api/v1/user-tokens', {
