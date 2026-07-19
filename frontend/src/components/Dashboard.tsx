@@ -8,15 +8,6 @@ interface Props {
   onNavigate: (page: string, tokenId?: string) => void;
 }
 
-interface TokenInfo {
-  id: string;
-  symbol: string;
-  name?: string;
-  isAvailableOnCex: boolean;
-}
-
-const POPULAR_ORDER = ['SOL', 'BONK', 'WIF', 'JUP', 'PYTH', 'RAY', 'ORCA', 'JTO', 'RENDER', 'POPCAT'];
-
 type SortKey = 'spread' | 'symbol' | 'updated' | 'hasspread';
 interface SortCriterion { key: SortKey; dir: 'asc' | 'desc'; }
 
@@ -32,13 +23,8 @@ export default function Dashboard({ onNavigate }: Props) {
   const [search, setSearch] = useState('');
   const [sorts, setSorts] = useState<SortCriterion[]>([{ key: 'hasspread', dir: 'desc' }, { key: 'spread', dir: 'desc' }]);
   const [connected, setConnected] = useState(false);
-  const [showAddToken, setShowAddToken] = useState(false);
-  const [addSearch, setAddSearch] = useState('');
-  const [addResults, setAddResults] = useState<TokenInfo[]>([]);
-  const [adding, setAdding] = useState<string | null>(null);
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
-  const addInputRef = useRef<HTMLInputElement>(null);
 
   const loadTokens = useCallback(() => {
     authFetch('/api/v1/user-tokens')
@@ -96,47 +82,6 @@ export default function Dashboard({ onNavigate }: Props) {
     return () => { connection.off('token.quote'); connection.off('token.status'); };
   }, []);
 
-  useEffect(() => {
-    if (!showAddToken) return;
-    const t = setTimeout(() => {
-      authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(addSearch)}&limit=200`)
-        .then(res => res.ok ? res.json() : [])
-        .then((list: TokenInfo[]) => {
-          const cexOnly = list.filter(t => t.isAvailableOnCex);
-          cexOnly.sort((a, b) => {
-            const aPop = POPULAR_ORDER.indexOf(a.symbol.toUpperCase());
-            const bPop = POPULAR_ORDER.indexOf(b.symbol.toUpperCase());
-            if (aPop !== -1 && bPop !== -1) return aPop - bPop;
-            if (aPop !== -1) return -1;
-            if (bPop !== -1) return 1;
-            return a.symbol.localeCompare(b.symbol);
-          });
-          setAddResults(cexOnly);
-        })
-        .catch(() => {});
-    }, 150);
-    return () => clearTimeout(t);
-  }, [addSearch, showAddToken]);
-
-  useEffect(() => {
-    if (showAddToken && addInputRef.current) {
-      addInputRef.current.focus();
-    }
-  }, [showAddToken]);
-
-  const doAddToken = async (tokenId: string) => {
-    setAdding(tokenId);
-    await authFetch('/api/v1/user-tokens', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokenId }),
-    });
-    setAdding(null);
-    setAddSearch('');
-    setShowAddToken(false);
-    loadTokens();
-  };
-
   const filtered = useMemo(() => {
     let result = tokens.filter(t =>
       t.symbol.toLowerCase().includes(search.toLowerCase()));
@@ -175,38 +120,8 @@ export default function Dashboard({ onNavigate }: Props) {
             onChange={e => setSearch(e.target.value)}
             className="px-3 py-1.5 bg-[#16171d] border border-[#2a2b36] rounded text-sm w-44 text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] transition-colors"
           />
-          <button onClick={() => { setShowAddToken(v => !v); setAddSearch(''); }}
-            className="px-2.5 py-1.5 bg-[#d97706] text-black font-medium rounded text-sm hover:bg-[#b45309] transition-colors whitespace-nowrap">+ Add</button>
         </div>
       </div>
-
-      {showAddToken && (
-        <div className="mb-4 bg-[#16171d] border border-[#2a2b36] rounded-lg p-3">
-          <input ref={addInputRef}
-            type="text" placeholder="Search tokens by name or symbol..."
-            value={addSearch} onChange={e => setAddSearch(e.target.value)}
-            className="w-full px-3 py-2 bg-[#111218] border border-[#2a2b36] rounded text-sm text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] transition-colors mb-2" />
-          <div className="flex flex-col gap-1 max-h-60 overflow-y-auto">
-            {addResults.filter(t => !tokens.some(mt => mt.id === t.id)).map(t => (
-              <div key={t.id}
-                className={`flex items-center justify-between px-2.5 py-1.5 rounded cursor-pointer transition-colors ${t.isAvailableOnCex ? 'hover:bg-[#1e1f28]' : 'opacity-50'}`}
-                onClick={() => t.isAvailableOnCex && doAddToken(t.id)}>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-[#f1f5f9]">{t.symbol}</span>
-                  {t.name && <span className="text-xs text-[#64748b]">{t.name}</span>}
-                  {!t.isAvailableOnCex && <span className="text-xs text-[#d97706]">no CEX</span>}
-                </div>
-                {t.isAvailableOnCex && (
-                  <span className="text-xs text-[#f59e0b]">{adding === t.id ? '...' : '+'}</span>
-                )}
-              </div>
-            ))}
-            {addResults.length === 0 && addSearch.length >= 1 && (
-              <p className="text-xs text-[#64748b] text-center py-4">No tokens found</p>
-            )}
-          </div>
-        </div>
-      )}
 
       <div className="flex gap-1.5 mb-4 flex-wrap items-center">
         {(Object.entries(sortLabels) as [SortKey, string][]).map(([key, label]) => {
@@ -230,13 +145,11 @@ export default function Dashboard({ onNavigate }: Props) {
         <span className="text-xs text-[#64748b] ml-auto">{tokens.length} token{tokens.length !== 1 ? 's' : ''}</span>
       </div>
 
-      {tokens.length === 0 && !showAddToken && (
+      {tokens.length === 0 && (
         <div className="text-center mt-16">
           <div className="text-4xl mb-3 text-[#2a2b36]">⟐</div>
           <p className="text-[#64748b] mb-1">No tokens tracked yet</p>
-          <p className="text-xs text-[#475569] mb-4">Click "+ Add" to start tracking spreads</p>
-          <button onClick={() => setShowAddToken(true)}
-            className="px-5 py-2 bg-[#f59e0b] text-black rounded text-sm font-semibold hover:bg-[#d97706] transition-colors">Add Tokens</button>
+          <p className="text-xs text-[#475569]">Go to Settings to add tokens</p>
         </div>
       )}
 
