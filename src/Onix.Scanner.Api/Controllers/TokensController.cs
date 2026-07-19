@@ -10,6 +10,8 @@ namespace Onix.Scanner.Api.Controllers;
 [Route("api/v1/tokens")]
 public class TokensController : ControllerBase
 {
+    private static readonly HashSet<string> PopularOrder = ["SOL", "BONK", "WIF", "JUP", "PYTH", "RAY", "ORCA", "JTO", "RENDER", "POPCAT"];
+
     private readonly ITokenRepository _tokenRepo;
     private readonly ITokenSnapshotPool _snapshotPool;
 
@@ -74,6 +76,24 @@ public class TokensController : ControllerBase
             }
             return dto;
         }).ToList();
+
+        result.Sort((a, b) =>
+        {
+            var aHasSpread = a.IsAvailableOnCex && a.SpreadPct is > 0 ? 0 : 1;
+            var bHasSpread = b.IsAvailableOnCex && b.SpreadPct is > 0 ? 0 : 1;
+            if (aHasSpread != bHasSpread) return aHasSpread - bHasSpread;
+
+            var aCex = a.IsAvailableOnCex ? 0 : 1;
+            var bCex = b.IsAvailableOnCex ? 0 : 1;
+            if (aCex != bCex) return aCex - bCex;
+
+            var aPop = PopularOrder.Contains(a.Symbol) ? 0 : 1;
+            var bPop = PopularOrder.Contains(b.Symbol) ? 0 : 1;
+            if (aPop != bPop) return aPop - bPop;
+
+            return string.Compare(a.Symbol, b.Symbol, StringComparison.OrdinalIgnoreCase);
+        });
+
         return Ok(result);
     }
 

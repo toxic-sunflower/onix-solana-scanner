@@ -31,6 +31,8 @@ export default function Dashboard({ onNavigate }: Props) {
   const [addSearch, setAddSearch] = useState('');
   const [addResults, setAddResults] = useState<TokenInfo[]>([]);
   const [addingId, setAddingId] = useState<string | null>(null);
+  const [addFocused, setAddFocused] = useState(false);
+  const addBlurTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const [sorts, setSorts] = useState<SortCriterion[]>([{ key: 'hasspread', dir: 'desc' }, { key: 'spread', dir: 'desc' }]);
   const [connected, setConnected] = useState(false);
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
@@ -92,13 +94,15 @@ export default function Dashboard({ onNavigate }: Props) {
     return () => { connection.off('token.quote'); connection.off('token.status'); };
   }, []);
 
+  const fetchAdd = useCallback(async (q: string) => {
+    const res = await authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(q)}&cexOnly=true&limit=200`);
+    if (res.ok) setAddResults(await res.json());
+  }, []);
+
   useEffect(() => {
-    const t = setTimeout(async () => {
-      const res = await authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(addSearch)}&limit=200`);
-      if (res.ok) setAddResults(await res.json());
-    }, 150);
+    const t = setTimeout(() => fetchAdd(addSearch), 150);
     return () => clearTimeout(t);
-  }, [addSearch]);
+  }, [addSearch, fetchAdd]);
 
   const doAddToken = async (id: string) => {
     setAddingId(id);
@@ -180,10 +184,15 @@ export default function Dashboard({ onNavigate }: Props) {
       <div className="relative mb-4">
         <input type="text" placeholder="Add token..."
           value={addSearch} onChange={e => setAddSearch(e.target.value)}
+          onFocus={() => { clearTimeout(addBlurTimer.current); setAddFocused(true); if (!addSearch) fetchAdd(''); }}
+          onBlur={() => { addBlurTimer.current = setTimeout(() => setAddFocused(false), 200); }}
           className="w-full px-3 py-2 bg-[#16171d] border border-[#2a2b36] rounded text-sm text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] transition-colors" />
-        {addSearch && addResults.length > 0 && (
+        {addFocused && (
           <div className="absolute left-0 right-0 top-full mt-1 bg-[#1e1f28] border border-[#2a2b36] rounded-lg shadow-xl z-50 max-h-72 overflow-y-auto">
-            {addResults.filter(t => t.isAvailableOnCex).map(t => {
+            {addResults.length === 0 && (
+              <p className="text-xs text-[#64748b] text-center py-4">No tokens found</p>
+            )}
+            {addResults.map(t => {
               const tracked = tokens.some(mt => mt.id === t.id);
               return (
                 <div key={t.id}
