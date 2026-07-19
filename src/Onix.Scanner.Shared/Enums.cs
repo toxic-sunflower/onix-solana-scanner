@@ -1,5 +1,8 @@
+using System.Text.Json.Serialization;
+
 namespace Onix.Scanner.Shared;
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum TokenHealthStatus
 {
     Active,
@@ -30,4 +33,10 @@ public enum UserRole
 {
     User,
     Admin
+}
+
+public enum SubscriptionTier
+{
+    Free,
+    Premium
 }

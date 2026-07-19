@@ -16,6 +16,7 @@ public class Token
     public Guid? ProxyId { get; set; }
     public bool Enabled { get; set; } = true;
     public bool TelegramEnabled { get; set; } = true;
+    public bool IsAvailableOnCex { get; set; } = false;
     public TokenHealthStatus Status { get; set; } = TokenHealthStatus.Disabled;
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }

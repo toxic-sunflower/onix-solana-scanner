@@ -1,14 +1,21 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
+using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Dtos;
 
 namespace Onix.Scanner.Api.Hubs;
 
+[Authorize]
 public class SpreadHub : Hub
 {
     private readonly ITokenSnapshotPool _snapshotPool;
     private readonly ITokenRepository _tokenRepo;
+
+    public const string PremiumGroup = "premium";
+    public const string FreeGroup = "free";
 
     public SpreadHub(ITokenSnapshotPool snapshotPool, ITokenRepository tokenRepo)
     {
@@ -18,13 +25,15 @@ public class SpreadHub : Hub
 
     public override async Task OnConnectedAsync()
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, "dashboard");
+        var tier = Context.User?.FindFirstValue("tier");
+        var group = tier == SubscriptionTier.Premium.ToString() ? PremiumGroup : FreeGroup;
+        await Groups.AddToGroupAsync(Context.ConnectionId, group);
 
         var tokens = await _tokenRepo.GetAllAsync();
         foreach (var token in tokens.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.BingxSymbol)))
         {
             if (!_snapshotPool.TryGetIndex(token.Id, out var idx)) continue;
-            var snap = _snapshotPool.GetSnapshot(idx);
+            var snap = _snapshotPool.ReadSnapshot(idx);
 
             var bingxPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0;
             var jupiterPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0;

@@ -27,4 +27,6 @@ public interface IUserRepository
     Task BlacklistJtisAsync(Guid userId, List<string> jtis, CancellationToken ct = default);
     Task<bool> IsJtiBlacklistedAsync(string jti, CancellationToken ct = default);
     Task CleanupExpiredBlacklistedJtisAsync(CancellationToken ct = default);
+    Task<LoginToken> CreateLoginTokenAsync(Guid userId, TimeSpan lifetime, CancellationToken ct = default);
+    Task<LoginToken?> ConsumeLoginTokenAsync(string token, CancellationToken ct = default);
 }

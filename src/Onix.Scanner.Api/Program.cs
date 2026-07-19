@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
@@ -39,7 +41,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var encryptionKey = Convert.FromBase64String(
     builder.Configuration.GetValue<string>("Encryption:Key")
@@ -47,8 +50,7 @@ var encryptionKey = Convert.FromBase64String(
 if (encryptionKey.Length != 16 && encryptionKey.Length != 24 && encryptionKey.Length != 32)
     throw new InvalidOperationException("Encryption:Key must decode to 16, 24, or 32 bytes");
 
-var jwtKey = encryptionKey.Length == 16 || encryptionKey.Length == 24
-    ? encryptionKey : encryptionKey[..16];
+var jwtKey = SHA256.HashData(encryptionKey);
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(o =>
@@ -69,6 +71,13 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 if (!string.IsNullOrEmpty(authHeader))
                 {
                     context.Token = authHeader;
+                    return Task.CompletedTask;
+                }
+
+                var accessToken = context.Request.Query["access_token"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(accessToken))
+                {
+                    context.Token = accessToken;
                 }
                 return Task.CompletedTask;
             }
@@ -113,9 +122,11 @@ builder.Services.AddHostedService<MigratorService>();
 builder.Services.AddHostedService<BingXConnectorService>();
 builder.Services.AddHostedService<SpreadEngineService>();
 builder.Services.AddHostedService<JupiterWorkerService>();
+builder.Services.AddHttpClient();
 builder.Services.AddSingleton<LocalizationService>();
 builder.Services.AddSingleton<TelegramNotificationService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramNotificationService>());
+builder.Services.AddHostedService<TokenSyncService>();
 builder.Services.AddHostedService<AggregationService>();
 builder.Services.AddHostedService<RetentionService>();
 
@@ -136,7 +147,7 @@ app.UseStaticFiles();
 app.MapGet("/api/v1/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }))
     .RequireRateLimiting("public");
 app.MapControllers();
-app.MapHub<SpreadHub>("/hubs/spread");
+app.MapHub<SpreadHub>("/hubs/spread").RequireAuthorization();
 
 app.MapFallbackToFile("index.html");
 

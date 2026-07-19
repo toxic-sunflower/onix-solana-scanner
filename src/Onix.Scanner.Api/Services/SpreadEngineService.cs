@@ -19,8 +19,10 @@ public sealed class SpreadEngineService : BackgroundService
     private readonly ILogger<SpreadEngineService> _logger;
 
     private const int BatchIntervalMs = 100;
+    private const int FreeUserInterval = 10;
     private static int SignalVersion = 1;
     private static long _eventCounter;
+    private int _cycleCount;
 
     private readonly Channel<SpreadTick> _tickChannel =
         System.Threading.Channels.Channel.CreateBounded<SpreadTick>(10000);
@@ -42,8 +44,9 @@ public sealed class SpreadEngineService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var batchWriter = BatchWriteTicksAsync(stoppingToken);
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
 
-        while (!stoppingToken.IsCancellationRequested)
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             using var scope = _scopeFactory.CreateScope();
             var tokenRepo = scope.ServiceProvider.GetRequiredService<ITokenRepository>();
@@ -54,7 +57,7 @@ public sealed class SpreadEngineService : BackgroundService
                 if (!_snapshotPool.TryGetIndex(token.Id, out var idx))
                     continue;
 
-                var snap = _snapshotPool.GetSnapshot(idx);
+                var snap = _snapshotPool.ReadSnapshot(idx);
 
                 var quality = SpreadCalculator.CalculateQuality(
                     snap.BingxTimestampUtc, snap.JupiterTimestampUtc);
@@ -108,12 +111,15 @@ public sealed class SpreadEngineService : BackgroundService
                     calculated_at = tick.CalculatedAt,
                     status = status.ToString()
                 };
-                await _hub.Clients.Group("dashboard").SendAsync("token.quote", quotePayload, stoppingToken);
+                await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.quote", quotePayload, stoppingToken);
+
+                if (_cycleCount % FreeUserInterval == 0)
+                    await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.quote", quotePayload, stoppingToken);
 
                 if (status != token.Status)
                 {
                     Interlocked.Increment(ref _eventCounter);
-                    await _hub.Clients.Group("dashboard").SendAsync("token.status", new
+                    var statusPayload = new
                     {
                         version = SignalVersion,
                         event_id = eventId + 1,
@@ -121,13 +127,16 @@ public sealed class SpreadEngineService : BackgroundService
                         status = status.ToString(),
                         bingx_status = snap.BingxTimestampUtc > 0 ? "ok" : "stale",
                         jupiter_status = snap.JupiterTimestampUtc > 0 ? "ok" : "stale"
-                    }, stoppingToken);
+                    };
+                    await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.status", statusPayload, stoppingToken);
+                    if (_cycleCount % FreeUserInterval == 0)
+                        await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.status", statusPayload, stoppingToken);
                 }
 
                 if (spread >= SpreadCalculator.DefaultAlertThresholdPct)
                 {
                     Interlocked.Increment(ref _eventCounter);
-                    await _hub.Clients.Group("dashboard").SendAsync("token.alert", new
+                    var alertPayload = new
                     {
                         version = SignalVersion,
                         event_id = eventId + 2,
@@ -135,13 +144,16 @@ public sealed class SpreadEngineService : BackgroundService
                         spread_pct = spread,
                         threshold = SpreadCalculator.DefaultAlertThresholdPct,
                         sent_at = DateTime.UtcNow
-                    }, stoppingToken);
+                    };
+                    await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.alert", alertPayload, stoppingToken);
+                    if (_cycleCount % FreeUserInterval == 0)
+                        await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.alert", alertPayload, stoppingToken);
                 }
 
                 _telegram?.EnqueueAlert(dto);
             }
 
-            await Task.Delay(50, stoppingToken);
+            _cycleCount++;
         }
 
         _tickChannel.Writer.TryComplete();

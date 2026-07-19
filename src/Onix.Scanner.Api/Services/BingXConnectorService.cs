@@ -15,7 +15,7 @@ public sealed class BingXConnectorService : BackgroundService
 
     private const string WsUrl = "wss://open-api-swap.bingx.com/swap-market";
 
-    private readonly Dictionary<string, (int Index, decimal Multiplier)> _symbolMap = new();
+    private readonly Dictionary<string, (int Index, decimal Multiplier)> _symbolMap = new(StringComparer.OrdinalIgnoreCase);
 
     public BingXConnectorService(
         ITokenSnapshotPool snapshotPool,
@@ -189,9 +189,15 @@ public sealed class BingXConnectorService : BackgroundService
                 return;
 
             var pricePerToken = askPrice / entry.Multiplier;
+            var scaled = pricePerToken * 1e18m;
+            if (scaled > long.MaxValue || scaled < long.MinValue)
+            {
+                _logger.LogTrace("Price overflow for {Symbol}: {Price}", symbol, pricePerToken);
+                return;
+            }
 
             ref var snap = ref _snapshotPool.GetSnapshot(entry.Index);
-            snap.BingxAskPriceRaw = (long)(pricePerToken * 1e18m);
+            snap.BingxAskPriceRaw = (long)scaled;
             snap.BingxTimestampUtc = DateTime.UtcNow.Ticks;
 
             if (data.TryGetProperty("updateTime", out var updateTime) && updateTime.ValueKind == JsonValueKind.Number)

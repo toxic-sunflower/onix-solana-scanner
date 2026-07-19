@@ -1,7 +1,9 @@
 import * as signalR from '@microsoft/signalr';
 
 const connection = new signalR.HubConnectionBuilder()
-  .withUrl('/hubs/spread')
+  .withUrl('/hubs/spread', {
+    accessTokenFactory: () => localStorage.getItem('auth_token') ?? ''
+  })
   .withAutomaticReconnect()
   .build();
 

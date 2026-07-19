@@ -19,6 +19,48 @@ public class TokensController : ControllerBase
         _snapshotPool = snapshotPool;
     }
 
+    [HttpGet("debug/snapshots")]
+    public ActionResult<object> DebugSnapshots()
+    {
+        var tokens = _tokenRepo.GetAllAsync(CancellationToken.None).Result;
+        var result = new List<object>();
+        foreach (var t in tokens.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.BingxSymbol)))
+        {
+            if (!_snapshotPool.TryGetIndex(t.Id, out var idx)) continue;
+            ref var snap = ref _snapshotPool.GetSnapshot(idx);
+            result.Add(new
+            {
+                symbol = t.Symbol,
+                bingxSymbol = t.BingxSymbol,
+                bingxPrice = snap.BingxAskPriceRaw / 1e18m,
+                jupiterPrice = snap.JupiterBuyPriceRaw / 1e18m,
+                spread = snap.BingxAskPriceRaw != 0 && snap.JupiterBuyPriceRaw != 0
+                    ? (snap.BingxAskPriceRaw - snap.JupiterBuyPriceRaw) / (decimal)snap.JupiterBuyPriceRaw * 100
+                    : 0,
+                bingxTs = new DateTime(snap.BingxTimestampUtc, DateTimeKind.Utc),
+                jupiterTs = new DateTime(snap.JupiterTimestampUtc, DateTimeKind.Utc),
+                seq = snap.Sequence
+            });
+        }
+        return Ok(result);
+    }
+
+    [HttpGet("search")]
+    public async Task<ActionResult<List<TokenSearchDto>>> Search(
+        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 50)
+    {
+        var tokens = await _tokenRepo.SearchAsync(q, cexOnly, limit);
+        return Ok(tokens.Select(t => new TokenSearchDto
+        {
+            Id = t.Id,
+            Symbol = t.Symbol,
+            Name = t.Name,
+            SolanaMint = t.SolanaMint,
+            Decimals = t.Decimals,
+            IsAvailableOnCex = t.IsAvailableOnCex,
+        }).ToList());
+    }
+
     [HttpGet]
     public async Task<ActionResult<List<TokenCardDto>>> GetAll()
     {
@@ -27,7 +69,7 @@ public class TokensController : ControllerBase
         {
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
             {
-                ref var snap = ref _snapshotPool.GetSnapshot(idx);
+                var snap = _snapshotPool.ReadSnapshot(idx);
                 return new TokenCardDto
                 {
                     Id = t.Id,
@@ -67,7 +109,7 @@ public class TokensController : ControllerBase
 
         if (_snapshotPool.TryGetIndex(id, out var idx))
         {
-            ref var snap = ref _snapshotPool.GetSnapshot(idx);
+            var snap = _snapshotPool.ReadSnapshot(idx);
             return Ok(new TokenCardDto
             {
                 Id = token.Id,

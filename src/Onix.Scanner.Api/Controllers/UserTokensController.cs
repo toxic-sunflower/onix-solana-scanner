@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
+using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Dtos;
 using Onix.Scanner.Shared.Models;
@@ -14,12 +15,12 @@ namespace Onix.Scanner.Api.Controllers;
 public class UserTokensController : ControllerBase
 {
     private readonly ITokenRepository _tokenRepo;
-    private readonly IUserRepository _userRepo;
+    private readonly ITokenSnapshotPool _snapshotPool;
 
-    public UserTokensController(ITokenRepository tokenRepo, IUserRepository userRepo)
+    public UserTokensController(ITokenRepository tokenRepo, ITokenSnapshotPool snapshotPool)
     {
         _tokenRepo = tokenRepo;
-        _userRepo = userRepo;
+        _snapshotPool = snapshotPool;
     }
 
     [HttpGet]
@@ -27,41 +28,54 @@ public class UserTokensController : ControllerBase
     {
         var userId = User.GetUserId();
         var tokens = await _tokenRepo.GetByUserIdAsync(userId, ct);
-        return Ok(tokens.Select(t => Map(t)).ToList());
+        return Ok(tokens.Select(t =>
+        {
+            if (_snapshotPool.TryGetIndex(t.Id, out var idx))
+            {
+                var snap = _snapshotPool.ReadSnapshot(idx);
+                return new UserTokenDto
+                {
+                    Id = t.Id,
+                    Symbol = t.Symbol,
+                    Name = t.Name,
+                    SolanaMint = t.SolanaMint,
+                    BingxSymbol = t.BingxSymbol,
+                    BingxUrl = t.BingxUrl,
+                    JupiterUrl = t.JupiterUrl,
+                    SolscanUrl = t.SolscanUrl,
+                    BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
+                    JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
+                    SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
+                    LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
+                        ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc) : null,
+                };
+            }
+            return new UserTokenDto
+            {
+                Id = t.Id,
+                Symbol = t.Symbol,
+                Name = t.Name,
+                SolanaMint = t.SolanaMint,
+                BingxSymbol = t.BingxSymbol,
+                BingxUrl = t.BingxUrl,
+                JupiterUrl = t.JupiterUrl,
+                SolscanUrl = t.SolscanUrl,
+            };
+        }).ToList());
     }
 
     [HttpPost]
     public async Task<ActionResult> AddToken([FromBody] AddTokenRequest request, CancellationToken ct)
     {
         var userId = User.GetUserId();
+        var token = await _tokenRepo.GetByIdAsync(request.TokenId, ct);
+        if (token is null)
+            return BadRequest(new { error = "Token not found" });
+        if (!token.IsAvailableOnCex)
+            return BadRequest(new { error = "Token is not available on CEX" });
 
-        if (string.IsNullOrWhiteSpace(request.SolanaMint) || request.SolanaMint.Length < 32)
-            return BadRequest(new { error = "Invalid Solana Mint Address" });
-        if (string.IsNullOrWhiteSpace(request.Symbol))
-            return BadRequest(new { error = "Symbol is required" });
-
-        var existingToken = await _tokenRepo.GetByMintAsync(request.SolanaMint, ct);
-        if (existingToken is null)
-        {
-            existingToken = new Token
-            {
-                Symbol = request.Symbol,
-                Name = request.Name,
-                SolanaMint = request.SolanaMint,
-                BingxSymbol = request.BingxSymbol ?? $"{request.Symbol}-USDT",
-                JupiterInputMint = "So11111111111111111111111111111111111111112",
-                QuoteAmount = request.QuoteAmount,
-                BingxUrl = $"https://www.bingx.com/en-us/futures/{request.Symbol}-USDT",
-                JupiterUrl = $"https://jup.ag/swap/SOL-{request.Symbol}",
-                SolscanUrl = $"https://solscan.io/token/{request.SolanaMint}",
-                Enabled = true,
-                TelegramEnabled = true
-            };
-            existingToken = await _tokenRepo.CreateAsync(existingToken, ct);
-        }
-
-        await _tokenRepo.AddUserTokenAsync(userId, existingToken.Id, ct);
-        return Ok(Map(existingToken));
+        await _tokenRepo.AddUserTokenAsync(userId, token.Id, ct);
+        return Ok();
     }
 
     [HttpDelete("{tokenId:guid}")]
@@ -72,24 +86,14 @@ public class UserTokensController : ControllerBase
         return NoContent();
     }
 
-    private static UserTokenDto Map(Token t) => new()
+    private static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
     {
-        Id = t.Id,
-        Symbol = t.Symbol,
-        Name = t.Name,
-        SolanaMint = t.SolanaMint,
-        BingxSymbol = t.BingxSymbol,
-        BingxUrl = t.BingxUrl,
-        JupiterUrl = t.JupiterUrl,
-        SolscanUrl = t.SolscanUrl
-    };
-
-    public class AddTokenRequest
-    {
-        public string SolanaMint { get; set; } = string.Empty;
-        public string? Symbol { get; set; }
-        public string? Name { get; set; }
-        public string? BingxSymbol { get; set; }
-        public decimal QuoteAmount { get; set; } = 0.01m;
+        if (bingxRaw == 0 || jupiterRaw == 0) return 0;
+        var bingx = (decimal)bingxRaw / 1e18m;
+        var jupiter = (decimal)jupiterRaw / 1e18m;
+        if (jupiter == 0) return 0;
+        return (bingx - jupiter) / jupiter * 100;
     }
+
+    public record AddTokenRequest(Guid TokenId);
 }

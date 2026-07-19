@@ -8,4 +8,5 @@ public interface ISpreadTickRepository
     Task WriteBatchAsync(IReadOnlyList<SpreadTick> ticks, CancellationToken ct = default);
     Task<ChartResponseDto> GetChartAsync(Guid tokenId, string interval, DateTime from, DateTime to, string timezone = "UTC", CancellationToken ct = default);
     Task CleanupOldTicksAsync(CancellationToken ct = default);
+    Task<List<TickPointDto>> GetTicksAsync(Guid tokenId, int limit = 100, CancellationToken ct = default);
 }

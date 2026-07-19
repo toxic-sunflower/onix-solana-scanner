@@ -18,12 +18,14 @@ public class JwtTokenService
     public string GenerateAccessToken(Guid userId, long telegramId, UserRole role, int tokenVersion, out string jti)
     {
         jti = Guid.NewGuid().ToString();
+        var tier = role == UserRole.Admin ? SubscriptionTier.Premium : SubscriptionTier.Free;
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
             new Claim("telegram_id", telegramId.ToString()),
             new Claim(ClaimTypes.Role, role.ToString()),
             new Claim("token_version", tokenVersion.ToString()),
+            new Claim("tier", tier.ToString()),
             new Claim(JwtRegisteredClaimNames.Jti, jti),
         };
 

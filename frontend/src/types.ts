@@ -1,14 +1,18 @@
-export interface TokenCardDto {
+export interface UserTokenDto {
   id: string;
   symbol: string;
+  name?: string;
+  solanaMint: string;
+  bingxSymbol: string;
+  bingxUrl?: string;
+  jupiterUrl?: string;
+  solscanUrl?: string;
   bingxAskPrice: number;
   jupiterBuyPrice: number;
   spreadPct: number;
-  status: string;
+  telegramEnabled: boolean;
   lastUpdated?: string;
-  bingxUrl: string;
-  jupiterUrl: string;
-  solscanUrl: string;
+  status?: string;
 }
 
 export interface QuotePayload {
@@ -23,30 +27,6 @@ export interface QuotePayload {
   jupiter_received_at?: string;
   calculated_at: string;
   status: string;
-}
-
-export interface StatusPayload {
-  version: number;
-  event_id: number;
-  token_id: string;
-  status: string;
-  bingx_status: string;
-  jupiter_status: string;
-}
-
-export function toTokenCardDto(p: QuotePayload, existing?: TokenCardDto): TokenCardDto {
-  return {
-    id: p.token_id,
-    symbol: p.symbol,
-    bingxAskPrice: p.bingx_ask_price,
-    jupiterBuyPrice: p.jupiter_buy_price,
-    spreadPct: p.spread_pct,
-    status: p.status,
-    lastUpdated: p.calculated_at,
-    bingxUrl: existing?.bingxUrl ?? '',
-    jupiterUrl: existing?.jupiterUrl ?? '',
-    solscanUrl: existing?.solscanUrl ?? '',
-  };
 }
 
 export interface ChartCandle {
@@ -65,4 +45,11 @@ export interface ChartResponse {
   from: string;
   to: string;
   candles: ChartCandle[];
+}
+
+export interface TickPoint {
+  time: string;
+  spreadPct: number;
+  bingxPrice: number;
+  jupiterPrice: number;
 }

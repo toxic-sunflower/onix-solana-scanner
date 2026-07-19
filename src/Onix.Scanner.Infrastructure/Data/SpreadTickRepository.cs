@@ -86,6 +86,22 @@ public class SpreadTickRepository : ISpreadTickRepository
         };
     }
 
+    public async Task<List<TickPointDto>> GetTicksAsync(Guid tokenId, int limit = 100, CancellationToken ct = default)
+    {
+        return await _db.SpreadTicks
+            .Where(t => t.TokenId == tokenId && t.SpreadPct != 0)
+            .OrderByDescending(t => t.CalculatedAt)
+            .Take(limit)
+            .Select(t => new TickPointDto
+            {
+                Time = t.CalculatedAt,
+                SpreadPct = t.SpreadPct,
+                BingxPrice = t.BingxAskPrice,
+                JupiterPrice = t.JupiterBuyPrice,
+            })
+            .ToListAsync(ct);
+    }
+
     public async Task CleanupOldTicksAsync(CancellationToken ct = default)
     {
         await _db.SpreadTicks

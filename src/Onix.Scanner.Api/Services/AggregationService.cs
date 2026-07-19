@@ -45,13 +45,13 @@ public sealed class AggregationService : BackgroundService
             cmd.CommandText = """
                 INSERT INTO spread_candles (bucket_start, token_id, interval_seconds, open, high, low, close, samples, avg_spread)
                 SELECT
-                    time_bucket(:interval::interval, "CalculatedAt") AS bucket_start,
+                    date_trunc('second', to_timestamp(floor(extract('epoch' from "CalculatedAt") / :seconds) * :seconds)) AS bucket_start,
                     "TokenId",
                     :seconds AS interval_seconds,
-                    FIRST("SpreadPct", "CalculatedAt") AS open,
+                    (array_agg("SpreadPct" ORDER BY "CalculatedAt"))[1] AS open,
                     MAX("SpreadPct") AS high,
                     MIN("SpreadPct") AS low,
-                    LAST("SpreadPct", "CalculatedAt") AS close,
+                    (array_agg("SpreadPct" ORDER BY "CalculatedAt" DESC))[1] AS close,
                     COUNT(*) AS samples,
                     AVG("SpreadPct") AS avg_spread
                 FROM spread_ticks

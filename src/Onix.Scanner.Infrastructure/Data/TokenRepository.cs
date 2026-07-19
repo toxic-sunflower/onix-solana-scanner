@@ -48,6 +48,48 @@ public class TokenRepository : ITokenRepository
         await _db.Tokens.Where(t => t.Id == id).ExecuteDeleteAsync(ct);
     }
 
+    public Task<List<Token>> SearchAsync(string? query, bool? cexOnly, int limit = 50, CancellationToken ct = default)
+    {
+        var q = _db.Tokens.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var like = $"%{query}%";
+            q = q.Where(t => EF.Functions.ILike(t.Symbol, like) || EF.Functions.ILike(t.Name ?? "", like));
+        }
+        if (cexOnly == true)
+            q = q.Where(t => t.IsAvailableOnCex);
+        return q.OrderBy(t => t.Symbol).Take(limit).ToListAsync(ct);
+    }
+
+    public async Task UpsertBatchAsync(List<Token> tokens, CancellationToken ct = default)
+    {
+        foreach (var token in tokens)
+        {
+            var existing = await _db.Tokens.FirstOrDefaultAsync(
+                t => t.SolanaMint == token.SolanaMint, ct);
+            if (existing is null)
+            {
+                token.UpdatedAt = DateTime.UtcNow;
+                _db.Tokens.Add(token);
+            }
+            else
+            {
+                existing.Symbol = token.Symbol;
+                existing.Name = token.Name;
+                existing.Decimals = token.Decimals;
+                existing.BingxSymbol = token.BingxSymbol;
+                existing.BingxUrl = token.BingxUrl;
+                existing.JupiterInputMint = token.JupiterInputMint;
+                existing.JupiterUrl = token.JupiterUrl;
+                existing.SolscanUrl = token.SolscanUrl;
+                existing.IsAvailableOnCex = token.IsAvailableOnCex;
+                existing.Enabled = token.Enabled;
+                existing.UpdatedAt = DateTime.UtcNow;
+            }
+        }
+        await _db.SaveChangesAsync(ct);
+    }
+
     public async Task AddUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default)
     {
         try

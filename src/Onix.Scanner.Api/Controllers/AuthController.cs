@@ -13,6 +13,7 @@ public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepo;
     private readonly string _botUsername;
+    private readonly string _appUrl;
     private readonly JwtTokenService _jwt;
 
     public AuthController(IUserRepository userRepo, IConfiguration config, JwtTokenService jwt)
@@ -20,6 +21,7 @@ public class AuthController : ControllerBase
         _userRepo = userRepo;
         _jwt = jwt;
         _botUsername = config.GetValue<string>("Telegram:BotUsername") ?? "YOUR_BOT";
+        _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
     }
 
     private string? DeviceName =>
@@ -243,6 +245,33 @@ public class AuthController : ControllerBase
             DisplayName = User.Identity?.Name,
             role = User.FindFirstValue(ClaimTypes.Role)
         });
+    }
+
+    [HttpGet("/login/{token}")]
+    public async Task<ActionResult> LoginViaMagicLink(string token, CancellationToken ct)
+    {
+        var loginToken = await _userRepo.ConsumeLoginTokenAsync(token, ct);
+        if (loginToken is null)
+            return BadRequest(new { error = "invalid_or_expired_token" });
+
+        var user = await _userRepo.GetByIdAsync(loginToken.UserId, ct);
+        if (user is null)
+            return BadRequest(new { error = "user_not_found" });
+
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+
+        await _userRepo.SaveRefreshTokenAsync(new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = hash,
+            LastJti = jti,
+            DeviceName = "Telegram Magic Link",
+            IpAddress = IpAddress,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
+
+        return Redirect($"{_appUrl}?token={accessToken}&refresh={refreshToken}");
     }
 
     public class VerifyRequest

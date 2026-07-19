@@ -14,6 +14,21 @@ public sealed class TokenSnapshotPool : ITokenSnapshotPool, IDisposable
         return ref _snapshots[index];
     }
 
+    public TokenSnapshot ReadSnapshot(int index)
+    {
+        var arr = _snapshots;
+        TokenSnapshot copy;
+        long before, after;
+        do
+        {
+            before = Volatile.Read(ref arr[index].Sequence);
+            copy = arr[index];
+            after = Volatile.Read(ref arr[index].Sequence);
+        }
+        while (before != after);
+        return copy;
+    }
+
     public int GetOrAddIndex(Guid tokenId)
     {
         if (_tokenIndex.TryGetValue(tokenId, out var index))

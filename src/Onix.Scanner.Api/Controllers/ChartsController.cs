@@ -5,7 +5,7 @@ using Onix.Scanner.Shared.Dtos;
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/tokens/{tokenId:guid}/chart")]
+[Route("api/v1/tokens/{tokenId:guid}")]
 public class ChartsController : ControllerBase
 {
     private readonly ISpreadTickRepository _spreadRepo;
@@ -15,7 +15,7 @@ public class ChartsController : ControllerBase
         _spreadRepo = spreadRepo;
     }
 
-    [HttpGet]
+    [HttpGet("chart")]
     public async Task<ActionResult<ChartResponseDto>> GetChart(
         Guid tokenId,
         [FromQuery] string interval = "5m",
@@ -29,5 +29,15 @@ public class ChartsController : ControllerBase
 
         var chart = await _spreadRepo.GetChartAsync(tokenId, interval, fromDate, toDate, timezone, ct);
         return Ok(chart);
+    }
+
+    [HttpGet("ticks")]
+    public async Task<ActionResult<List<TickPointDto>>> GetTicks(
+        Guid tokenId,
+        [FromQuery] int limit = 100,
+        CancellationToken ct = default)
+    {
+        var ticks = await _spreadRepo.GetTicksAsync(tokenId, limit, ct);
+        return Ok(ticks);
     }
 }

@@ -18,6 +18,7 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly JwtTokenService _jwt;
     private readonly TotpService _totp;
     private readonly LocalizationService _loc;
+    private readonly string _webhookSecret;
 
     private readonly ConcurrentDictionary<long, BotState> _states = new();
     private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
@@ -38,6 +39,7 @@ public sealed class TelegramNotificationService : BackgroundService
         _logger = logger;
         _services = services;
         _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
+        _webhookSecret = config["Telegram:WebhookSecret"] ?? "";
         _jwt = jwt;
         _totp = totp;
         _loc = loc;
@@ -60,6 +62,11 @@ public sealed class TelegramNotificationService : BackgroundService
         _alertChannel.Writer.TryWrite(dto);
     }
 
+    public async Task HandleUpdate(Update update, CancellationToken ct)
+    {
+        await HandleUpdateAsync(_bot!, update, ct);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("TelegramNotificationService starting");
@@ -70,23 +77,39 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             try
             {
-                _logger.LogInformation("Starting bot polling via StartReceiving");
-                _bot.StartReceiving(
-                    updateHandler: HandleUpdateAsync,
-                    errorHandler: OnPollingError,
-                    receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
-                    {
-                        AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
-                    },
-                    cancellationToken: stoppingToken);
-                _logger.LogInformation("Bot polling started");
+                var useWebhook = !string.IsNullOrEmpty(_webhookSecret);
+                if (useWebhook)
+                {
+                    var webhookUrl = $"{_appUrl.TrimEnd('/')}/api/v1/bot/webhook";
+                    _logger.LogInformation("Setting Telegram webhook: {Url}", webhookUrl);
+                    await _bot.SetWebhook(webhookUrl, secretToken: _webhookSecret,
+                        allowedUpdates: [UpdateType.Message, UpdateType.CallbackQuery],
+                        cancellationToken: stoppingToken);
+                    _logger.LogInformation("Telegram webhook set");
+                }
+                else
+                {
+                    _logger.LogInformation("Starting bot polling via StartReceiving");
+                    _bot.StartReceiving(
+                        updateHandler: HandleUpdateAsync,
+                        errorHandler: OnPollingError,
+                        receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
+                        {
+                            AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
+                        },
+                        cancellationToken: stoppingToken);
+                    _logger.LogInformation("Bot polling started");
+                }
 
-                // Keep alive until cancellation
                 await Task.Delay(Timeout.Infinite, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("Bot polling stopped (shutdown)");
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Bot polling failed");
+                _logger.LogError(ex, "Bot polling/webhook setup failed");
             }
         }
 
@@ -167,7 +190,9 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
             _totp.ClearChallenge(chatId);
-            _states.TryRemove(chatId, out _);
+            if (_states.TryRemove(chatId, out var startState))
+                foreach (var mid in startState.FlowMessageIds)
+                    try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
         }
         else if (_states.TryGetValue(chatId, out var state) && state.State == BotStep.AwaitingOtp)
         {
@@ -337,6 +362,7 @@ public sealed class TelegramNotificationService : BackgroundService
                 break;
             case "main_menu":
                 _states.TryRemove(chatId.Value, out _);
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
                 await ShowMainMenu(chatId.Value, ct);
                 break;
         }
@@ -468,7 +494,7 @@ public sealed class TelegramNotificationService : BackgroundService
         await ms.WriteAsync(pngBytes, ct);
         ms.Position = 0;
 
-        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}\n<a href=\"{_appUrl}/app?name=google\">Google Authenticator</a>\n<a href=\"{_appUrl}/app?name=authy\">Authy</a>\n<a href=\"{_appUrl}/app?name=microsoft\">Microsoft Authenticator</a>\n<a href=\"{_appUrl}/app?name=2fas\">2FAS</a>";
+        var caption = $"{_loc.Get(chatId, "setup_intro")}\n\n{_loc.Get(chatId, "manual_secret", ("secret", secret))}\n\n{_loc.Get(chatId, "popular_apps")}";
         var qrMsg = await _bot!.SendPhoto(
             chatId: chatId,
             photo: Telegram.Bot.Types.InputFile.FromStream(ms, "qrcode.png"),
@@ -518,12 +544,6 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        if (user.Status != "active")
-        {
-            await StartRegistration(chatId, fromId, ct, user);
-            return;
-        }
-
         var result = _totp.StartChallenge(chatId, user.Id, "link");
         if (result.Blocked)
         {
@@ -532,6 +552,10 @@ public sealed class TelegramNotificationService : BackgroundService
                 cancellationToken: ct);
             return;
         }
+
+        if (_states.TryRemove(chatId, out var oldState))
+            foreach (var mid in oldState.FlowMessageIds)
+                try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
 
         _states[chatId] = new BotState { State = BotStep.AwaitingOtp, UserId = user.Id, Purpose = "link" };
         await DeletePreviousScreen(chatId, ct);
@@ -569,9 +593,12 @@ public sealed class TelegramNotificationService : BackgroundService
         using var scope = _services.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
         var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
-        if (user is null && state.Purpose != "register")
+        if (user is null)
         {
-            await ShowMainMenu(chatId, ct);
+            _states.TryRemove(chatId, out _);
+            foreach (var mid in state.FlowMessageIds)
+                try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
+            await ShowRegistrationRequired(chatId, ct);
             return;
         }
 
@@ -657,27 +684,29 @@ public sealed class TelegramNotificationService : BackgroundService
             await userRepo.UpdateAsync(user, ct);
         }
 
-        var authToken = _jwt.GenerateAccessToken(user!.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
-        await userRepo.SaveRefreshTokenAsync(new Shared.Models.RefreshToken
+        try
         {
-            UserId = user.Id,
-            TokenHash = hash,
-            LastJti = jti,
-            DeviceName = "Telegram Bot",
-            ExpiresAt = DateTime.UtcNow.AddDays(30),
-        }, ct);
+            var loginToken = await userRepo.CreateLoginTokenAsync(user!.Id, TimeSpan.FromMinutes(5), ct);
 
-        _states.TryRemove(chatId, out _);
+            foreach (var mid in state.FlowMessageIds)
+                try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
+            _states.TryRemove(chatId, out _);
 
-        var linkLang = _loc.GetLanguage(chatId);
-        var link = $"{_appUrl}?token={authToken}&refresh={refreshToken}&lang={linkLang}";
+            var link = $"{_appUrl}/login/{loginToken.Token}";
 
-        var linkKey = result.UsedBackup ? "login_link_backup" : "login_link";
-        await _bot!.SendMessage(chatId: chatId,
-            text: _loc.Get(chatId, linkKey, ("link", link)),
-            cancellationToken: ct);
-        await ShowMainMenu(chatId, ct);
+            var linkKey = result.UsedBackup ? "login_link_backup" : "login_link";
+            await _bot!.SendMessage(chatId: chatId,
+                text: _loc.Get(chatId, linkKey, ("link", link)),
+                parseMode: ParseMode.Markdown,
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate login link for user {UserId}", user!.Id);
+            await _bot!.SendMessage(chatId: chatId,
+                text: _loc.Get(chatId, "error_generating_link"),
+                cancellationToken: ct);
+        }
     }
 
     // ── Language detection ──
@@ -748,7 +777,7 @@ public sealed class TelegramNotificationService : BackgroundService
     {
         var msg = await _bot!.SendMessage(
             chatId: chatId,
-            text: _loc.Get(chatId, "registration_required"),
+            text: _loc.Get(chatId, "not_registered"),
             parseMode: ParseMode.Markdown,
             replyMarkup: new InlineKeyboardMarkup(
                 InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "register_btn"), "register_0")),
@@ -778,6 +807,7 @@ public sealed class TelegramNotificationService : BackgroundService
              InlineKeyboardButton.WithUrl("Jupiter", dto.JupiterUrl)],
             [InlineKeyboardButton.WithUrl("Contract", dto.SolscanUrl),
              InlineKeyboardButton.WithUrl("Chart", $"/chart/{dto.Id}")],
+            [InlineKeyboardButton.WithCallbackData("Главное меню", "main_menu")],
         ]);
 
         var sent = await _bot!.SendMessage(

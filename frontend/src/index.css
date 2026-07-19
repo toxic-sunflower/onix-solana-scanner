@@ -1,12 +1,52 @@
 @import "tailwindcss";
 
 :root {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
   color-scheme: dark;
 }
 
 body {
   margin: 0;
-  background: #0f1014;
-  color: #e5e7eb;
+  background: #0d0e12;
+  color: #f1f5f9;
 }
+
+@keyframes shimmer {
+  0% { opacity: 0.4; }
+  50% { opacity: 1; }
+  100% { opacity: 0.4; }
+}
+
+@keyframes flash-green {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(34, 197, 94, 0.15); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-red {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(239, 68, 68, 0.15); }
+  100% { background-color: transparent; }
+}
+
+@keyframes flash-neutral {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(245, 158, 11, 0.1); }
+  100% { background-color: transparent; }
+}
+
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.shimmer { animation: shimmer 1.5s ease-in-out infinite; }
+.flash-update { animation: flash-neutral 1s ease-out; }
+.price-up { animation: flash-green 1s ease-out; }
+.price-down { animation: flash-red 1s ease-out; }
+.slide-in { animation: slide-in 0.3s ease-out; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #16171d; }
+::-webkit-scrollbar-thumb { background: #2a2b36; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #3a3b48; }

@@ -6,7 +6,7 @@
   "register_btn": "Register",
   "main_menu": "📱 Main menu",
   "get_login_link": "Get login link",
-  "login_link": "✅ Login link:\n{link}\n\nThis link expires in 30 days.",
+  "login_link": "✅ Login link:\n{link}\n\nThis link expires in 5 minutes.\n\nTap the link above or copy it into your browser.",
   "login_link_backup": "✅ Login link:\n{link}\n\n⚠️ You used a backup code. Go to Settings on the website to set up a new authenticator.",
   "backup_codes_title": "*Backup codes (save these!):*",
   "reset_code_label": "*Reset code:* `{code}`",
@@ -25,6 +25,8 @@
   "2fa_reset": "✅ 2FA has been reset. You can now log in without a code.\n\nSet up a new authenticator in Settings to enable 2FA again.",
   "registration_required": "You need to set up two-factor authentication first.\n\nTap *Register* to begin.",
   "registration_expired": "Registration expired. Try again.",
+  "not_registered": "You are not registered in the system.\n\nTap *Register* to set up two-factor authentication.",
+  "error_generating_link": "Failed to generate login link. Please try again later.",
 
   "signal_title": "🚨 {symbol}  {spread}% (Solana)",
   "signal_profit": "💰 Profit: {spread}%",
@@ -34,5 +36,5 @@
 
   "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
   "manual_secret": "Or enter this secret manually: <code>{secret}</code>",
-  "popular_apps": "— Popular authenticator apps:"
+  "popular_apps": "— Popular authenticator apps:\n<a href=\"https://apps.apple.com/app/google-authenticator/id388497605\">Google Authenticator</a>\n<a href=\"https://authy.com/download\">Authy</a>\n<a href=\"https://www.microsoft.com/en-us/security/mobile-authenticator-app\">Microsoft Authenticator</a>\n<a href=\"https://2fas.com\">2FAS</a>"
 }
