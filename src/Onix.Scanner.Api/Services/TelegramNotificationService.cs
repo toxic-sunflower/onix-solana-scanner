@@ -38,6 +38,8 @@ public sealed class TelegramNotificationService : BackgroundService
         _logger = logger;
         _services = services;
         _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
+        if (!_appUrl.StartsWith("http://") && !_appUrl.StartsWith("https://"))
+            _appUrl = "https://" + _appUrl;
         _jwt = jwt;
         _totp = totp;
         _loc = loc;
