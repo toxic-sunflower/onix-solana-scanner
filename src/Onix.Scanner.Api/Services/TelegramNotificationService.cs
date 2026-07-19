@@ -18,7 +18,6 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly JwtTokenService _jwt;
     private readonly TotpService _totp;
     private readonly LocalizationService _loc;
-    private readonly string _webhookSecret;
 
     private readonly ConcurrentDictionary<long, BotState> _states = new();
     private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
@@ -39,7 +38,6 @@ public sealed class TelegramNotificationService : BackgroundService
         _logger = logger;
         _services = services;
         _appUrl = config.GetValue<string>("App:Url") ?? "http://localhost:5000";
-        _webhookSecret = config["Telegram:WebhookSecret"] ?? "";
         _jwt = jwt;
         _totp = totp;
         _loc = loc;
@@ -62,11 +60,6 @@ public sealed class TelegramNotificationService : BackgroundService
         _alertChannel.Writer.TryWrite(dto);
     }
 
-    public async Task HandleUpdate(Update update, CancellationToken ct)
-    {
-        await HandleUpdateAsync(_bot!, update, ct);
-    }
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("TelegramNotificationService starting");
@@ -77,29 +70,16 @@ public sealed class TelegramNotificationService : BackgroundService
         {
             try
             {
-                var useWebhook = !string.IsNullOrEmpty(_webhookSecret);
-                if (useWebhook)
-                {
-                    var webhookUrl = $"{_appUrl.TrimEnd('/')}/api/v1/bot/webhook";
-                    _logger.LogInformation("Setting Telegram webhook: {Url}", webhookUrl);
-                    await _bot.SetWebhook(webhookUrl, secretToken: _webhookSecret,
-                        allowedUpdates: [UpdateType.Message, UpdateType.CallbackQuery],
-                        cancellationToken: stoppingToken);
-                    _logger.LogInformation("Telegram webhook set");
-                }
-                else
-                {
-                    _logger.LogInformation("Starting bot polling via StartReceiving");
-                    _bot.StartReceiving(
-                        updateHandler: HandleUpdateAsync,
-                        errorHandler: OnPollingError,
-                        receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
-                        {
-                            AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
-                        },
-                        cancellationToken: stoppingToken);
-                    _logger.LogInformation("Bot polling started");
-                }
+                _logger.LogInformation("Starting bot polling via StartReceiving");
+                _bot.StartReceiving(
+                    updateHandler: HandleUpdateAsync,
+                    errorHandler: OnPollingError,
+                    receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
+                    {
+                        AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
+                    },
+                    cancellationToken: stoppingToken);
+                _logger.LogInformation("Bot polling started");
 
                 await Task.Delay(Timeout.Infinite, stoppingToken);
             }
@@ -109,7 +89,7 @@ public sealed class TelegramNotificationService : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Bot polling/webhook setup failed");
+                _logger.LogError(ex, "Bot polling failed");
             }
         }
 
