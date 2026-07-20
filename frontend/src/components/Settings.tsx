@@ -110,10 +110,9 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     if (filter === 'tracked') list = list.filter(t => myTokenIds.includes(t.id));
     else if (filter === 'untracked') list = list.filter(t => !myTokenIds.includes(t.id));
     list.sort((a, b) => {
-      const aT = myTokenIds.includes(a.id) ? 0 : 1;
-      const bT = myTokenIds.includes(b.id) ? 0 : 1;
-      if (aT !== bT) return aT - bT;
-      return 0;
+      const aRank = myTokenIds.includes(a.id) ? 0 : a.isAvailableOnCex ? 1 : 2;
+      const bRank = myTokenIds.includes(b.id) ? 0 : b.isAvailableOnCex ? 1 : 2;
+      return aRank - bRank;
     });
     return list;
   }, [allTokens, myTokenIds, filter]);
