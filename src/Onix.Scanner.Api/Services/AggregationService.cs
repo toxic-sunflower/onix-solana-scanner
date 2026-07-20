@@ -58,7 +58,7 @@ public sealed class AggregationService : BackgroundService
                 WHERE "CalculatedAt" >= NOW() - :interval::interval
                     AND "QualityStatus" = 'Valid'
                 GROUP BY "TokenId", bucket_start
-                ON CONFLICT (bucket_start, "TokenId", interval_seconds)
+                ON CONFLICT (bucket_start, token_id, interval_seconds)
                 DO UPDATE SET
                     open = EXCLUDED.open,
                     high = EXCLUDED.high,
