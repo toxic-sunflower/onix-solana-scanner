@@ -49,9 +49,11 @@ public class TokensController : ControllerBase
 
     [HttpGet("search")]
     public async Task<ActionResult<List<TokenSearchDto>>> Search(
-        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 200)
+        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 50)
     {
         var tokens = await _tokenRepo.SearchAsync(q, cexOnly, limit);
+        var popularity = await _tokenRepo.GetTokenUserCountsAsync();
+
         var result = tokens.Select(t =>
         {
             var dto = new TokenSearchDto
@@ -62,7 +64,7 @@ public class TokensController : ControllerBase
                 SolanaMint = t.SolanaMint,
                 Decimals = t.Decimals,
                 IsAvailableOnCex = t.IsAvailableOnCex,
-                QuoteAmount = t.QuoteAmount,
+                Popularity = popularity.GetValueOrDefault(t.Id, 0),
             };
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
             {
@@ -88,7 +90,7 @@ public class TokensController : ControllerBase
             var bCex = b.IsAvailableOnCex ? 0 : 1;
             if (aCex != bCex) return aCex - bCex;
 
-            var cmp = -a.QuoteAmount.CompareTo(b.QuoteAmount);
+            var cmp = b.Popularity.CompareTo(a.Popularity);
             if (cmp != 0) return cmp;
 
             return string.Compare(a.Symbol, b.Symbol, StringComparison.OrdinalIgnoreCase);

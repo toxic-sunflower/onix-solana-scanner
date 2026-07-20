@@ -16,4 +16,5 @@ public interface ITokenRepository
     Task UpsertBatchAsync(List<Token> tokens, CancellationToken ct = default);
     Task AddUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
     Task RemoveUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
+    Task<Dictionary<Guid, int>> GetTokenUserCountsAsync(CancellationToken ct = default);
 }

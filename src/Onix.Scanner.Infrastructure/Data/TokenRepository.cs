@@ -53,8 +53,7 @@ public class TokenRepository : ITokenRepository
         var q = _db.Tokens.AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
         {
-            var like = $"%{query}%";
-            q = q.Where(t => EF.Functions.ILike(t.Symbol, like) || EF.Functions.ILike(t.Name ?? "", like));
+            q = q.Where(t => t.Symbol.StartsWith(query) || (t.Name != null && t.Name.StartsWith(query)));
         }
         if (cexOnly == true)
             q = q.Where(t => t.IsAvailableOnCex);
@@ -105,5 +104,13 @@ public class TokenRepository : ITokenRepository
         await _db.UserTokens
             .Where(ut => ut.UserId == userId && ut.TokenId == tokenId)
             .ExecuteDeleteAsync(ct);
+    }
+
+    public async Task<Dictionary<Guid, int>> GetTokenUserCountsAsync(CancellationToken ct = default)
+    {
+        return await _db.UserTokens
+            .GroupBy(ut => ut.TokenId)
+            .Select(g => new { TokenId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.TokenId, x => x.Count, ct);
     }
 }
