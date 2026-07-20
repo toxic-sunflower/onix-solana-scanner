@@ -186,12 +186,12 @@ export default function Settings({ onBack }: { onBack: () => void }) {
                   {tracked ? (
                     <button onClick={() => removeToken(t.id)}
                       className="px-2 py-1 text-xs rounded bg-[#2a2b36] text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#3a2a2a] transition-colors whitespace-nowrap">Remove</button>
-                  ) : (
+                  ) : t.isAvailableOnCex ? (
                     <button onClick={() => addToken(t.id)}
                       className="px-2.5 py-1 text-xs font-medium rounded bg-[#d97706] text-black hover:bg-[#b45309] transition-colors whitespace-nowrap">
                       {adding === t.id ? '...' : '+Track'}
                     </button>
-                  )}
+                  ) : null}
                 </div>
               );
             })}
