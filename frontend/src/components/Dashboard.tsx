@@ -10,6 +10,8 @@ interface TokenInfo {
   name?: string;
   isAvailableOnCex: boolean;
   spreadPct?: number | null;
+  bingxAskPrice?: number | null;
+  jupiterBuyPrice?: number | null;
 }
 
 interface Props {
@@ -197,10 +199,20 @@ export default function Dashboard({ onNavigate }: Props) {
               return (
                 <div key={t.id}
                   className="flex items-center justify-between px-3 py-2 border-b border-[#2a2b36] last:border-0 hover:bg-[#2a2b36] transition-colors">
-                  <div className="flex items-center gap-2.5">
+                  <div className="flex items-center gap-3 min-w-0">
                     <span className="text-sm font-semibold text-[#f1f5f9]">{t.symbol}</span>
+                    {t.bingxAskPrice != null && t.bingxAskPrice > 0 && (
+                      <span className="text-[10px] text-[#64748b] font-mono">
+                        CEX ${Number(t.bingxAskPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                      </span>
+                    )}
+                    {t.jupiterBuyPrice != null && t.jupiterBuyPrice > 0 && (
+                      <span className="text-[10px] text-[#64748b] font-mono">
+                        DEX ${Number(t.jupiterBuyPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 })}
+                      </span>
+                    )}
                     {t.spreadPct != null && t.spreadPct > 0 && (
-                      <span className={`text-xs font-medium ${spreadColor(t.spreadPct)}`}>
+                      <span className={`text-[10px] font-medium ${spreadColor(t.spreadPct)}`}>
                         {t.spreadPct > 0 ? '+' : ''}{t.spreadPct.toFixed(2)}%
                       </span>
                     )}

@@ -113,4 +113,24 @@ public class TokenRepository : ITokenRepository
             .Select(g => new { TokenId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.TokenId, x => x.Count, ct);
     }
+
+    public async Task AddDefaultTokensAsync(Guid userId, CancellationToken ct = default)
+    {
+        var popular = new[] { "SOL", "BONK", "WIF", "JUP", "PYTH", "RAY", "ORCA", "JTO", "RENDER", "POPCAT" };
+        var tokens = await _db.Tokens
+            .Where(t => t.Enabled && popular.Contains(t.Symbol))
+            .Take(10)
+            .ToListAsync(ct);
+
+        foreach (var token in tokens)
+        {
+            _db.UserTokens.Add(new UserToken
+            {
+                UserId = userId,
+                TokenId = token.Id,
+                QuoteAmount = 100m,
+            });
+        }
+        await _db.SaveChangesAsync(ct);
+    }
 }

@@ -12,13 +12,15 @@ namespace Onix.Scanner.Api.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IUserRepository _userRepo;
+    private readonly ITokenRepository _tokenRepo;
     private readonly string _botUsername;
     private readonly string _appUrl;
     private readonly JwtTokenService _jwt;
 
-    public AuthController(IUserRepository userRepo, IConfiguration config, JwtTokenService jwt)
+    public AuthController(IUserRepository userRepo, ITokenRepository tokenRepo, IConfiguration config, JwtTokenService jwt)
     {
         _userRepo = userRepo;
+        _tokenRepo = tokenRepo;
         _jwt = jwt;
         _botUsername = config.GetValue<string>("Telegram:BotUsername") ?? "YOUR_BOT";
         _appUrl = (config.GetValue<string>("App:Url") ?? "http://localhost:5000").Trim();
@@ -54,6 +56,7 @@ public class AuthController : ControllerBase
                 LastLoginAt = DateTime.UtcNow
             };
             user = await _userRepo.CreateAsync(user, ct);
+            await _tokenRepo.AddDefaultTokensAsync(user.Id, ct);
         }
 
         var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);

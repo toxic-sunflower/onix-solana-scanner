@@ -456,6 +456,7 @@ public sealed class TelegramNotificationService : BackgroundService
 
         using var scope = _services.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+        var tokenRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.ITokenRepository>();
 
         Shared.Models.User user;
         if (existingUser is not null)
@@ -483,6 +484,7 @@ public sealed class TelegramNotificationService : BackgroundService
             };
             user = await userRepo.CreateAsync(user, ct);
             await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
+            await tokenRepo.AddDefaultTokensAsync(user.Id, ct);
         }
 
         _states[chatId] = new BotState

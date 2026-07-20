@@ -106,6 +106,7 @@ public class AppDbContext : DbContext
             e.HasKey(x => new { x.UserId, x.TokenId });
             e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
             e.Property(x => x.AlertThresholdPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
+            e.Property(x => x.QuoteAmount).HasColumnType("numeric(38,18)").HasDefaultValue(100m);
         });
 
         modelBuilder.Entity<SpreadTick>(e =>
