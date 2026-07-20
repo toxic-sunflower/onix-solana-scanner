@@ -125,7 +125,7 @@ public sealed class TokenSyncService : BackgroundService
         try
         {
             var contracts = await client.GetFromJsonAsync<BingxContractsResponse>(
-                "https://open-api-swap.bingx.com/openApi/swap/v2/quote/contracts", ct);
+                "https://open-api.bingx.com/openApi/swap/v2/quote/contracts", ct);
 
             if (contracts?.Data is null) return [];
 
