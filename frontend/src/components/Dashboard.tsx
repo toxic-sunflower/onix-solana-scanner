@@ -97,8 +97,11 @@ export default function Dashboard({ onNavigate }: Props) {
   }, []);
 
   const fetchAdd = useCallback(async (q: string) => {
-    const res = await authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(q)}&cexOnly=true&limit=200`);
-    if (res.ok) setAddResults(await res.json());
+    const res = await authFetch(`/api/v1/tokens/search?q=${encodeURIComponent(q)}&cexOnly=true&take=200`);
+    if (res.ok) {
+      const data = await res.json();
+      setAddResults(data.items ?? data);
+    }
   }, []);
 
   useEffect(() => {

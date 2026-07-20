@@ -48,13 +48,13 @@ public class TokensController : ControllerBase
     }
 
     [HttpGet("search")]
-    public async Task<ActionResult<List<TokenSearchDto>>> Search(
-        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int limit = 50)
+    public async Task<ActionResult<object>> Search(
+        [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int offset = 0, [FromQuery] int take = 25)
     {
-        var tokens = await _tokenRepo.SearchAsync(q, cexOnly, limit);
+        var tokens = await _tokenRepo.SearchAsync(q, cexOnly);
         var popularity = await _tokenRepo.GetTokenUserCountsAsync();
 
-        var result = tokens.Select(t =>
+        var all = tokens.Select(t =>
         {
             var dto = new TokenSearchDto
             {
@@ -80,7 +80,7 @@ public class TokensController : ControllerBase
             return dto;
         }).ToList();
 
-        result.Sort((a, b) =>
+        all.Sort((a, b) =>
         {
             var aHasSpread = a.IsAvailableOnCex && a.SpreadPct is > 0 ? 0 : 1;
             var bHasSpread = b.IsAvailableOnCex && b.SpreadPct is > 0 ? 0 : 1;
@@ -96,7 +96,9 @@ public class TokensController : ControllerBase
             return string.Compare(a.Symbol, b.Symbol, StringComparison.OrdinalIgnoreCase);
         });
 
-        return Ok(result);
+        var total = all.Count;
+        var items = all.Skip(offset).Take(take).ToList();
+        return Ok(new { items, total });
     }
 
     [HttpGet]

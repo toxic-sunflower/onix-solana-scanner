@@ -48,7 +48,7 @@ public class TokenRepository : ITokenRepository
         await _db.Tokens.Where(t => t.Id == id).ExecuteDeleteAsync(ct);
     }
 
-    public Task<List<Token>> SearchAsync(string? query, bool? cexOnly, int limit = 50, CancellationToken ct = default)
+    public Task<List<Token>> SearchAsync(string? query, bool? cexOnly, CancellationToken ct = default)
     {
         var q = _db.Tokens.AsQueryable();
         if (!string.IsNullOrWhiteSpace(query))
@@ -57,7 +57,7 @@ public class TokenRepository : ITokenRepository
         }
         if (cexOnly == true)
             q = q.Where(t => t.IsAvailableOnCex);
-        return q.OrderBy(t => t.Symbol).Take(limit).ToListAsync(ct);
+        return q.OrderBy(t => t.Symbol).ToListAsync(ct);
     }
 
     public async Task UpsertBatchAsync(List<Token> tokens, CancellationToken ct = default)

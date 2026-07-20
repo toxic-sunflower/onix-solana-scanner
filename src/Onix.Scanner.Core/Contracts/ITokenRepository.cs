@@ -12,7 +12,7 @@ public interface ITokenRepository
     Task DeleteAsync(Guid id, CancellationToken ct = default);
     Task<Token?> GetByMintAsync(string solanaMint, CancellationToken ct = default);
     Task<List<Token>> GetByUserIdAsync(Guid userId, CancellationToken ct = default);
-    Task<List<Token>> SearchAsync(string? query, bool? cexOnly, int limit = 50, CancellationToken ct = default);
+    Task<List<Token>> SearchAsync(string? query, bool? cexOnly, CancellationToken ct = default);
     Task UpsertBatchAsync(List<Token> tokens, CancellationToken ct = default);
     Task AddUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
     Task RemoveUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
