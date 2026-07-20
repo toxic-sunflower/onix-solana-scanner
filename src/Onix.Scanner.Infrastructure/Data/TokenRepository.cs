@@ -128,9 +128,28 @@ public class TokenRepository : ITokenRepository
             {
                 UserId = userId,
                 TokenId = token.Id,
-                QuoteAmount = 100m,
             });
         }
         await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task SetQuoteAmountAsync(Guid tokenId, decimal amount, CancellationToken ct = default)
+    {
+        var existing = await _db.TokenQuoteAmounts.FindAsync([tokenId], ct);
+        if (existing is not null)
+        {
+            existing.QuoteAmount = amount;
+        }
+        else
+        {
+            _db.TokenQuoteAmounts.Add(new TokenQuoteAmount { TokenId = tokenId, QuoteAmount = amount });
+        }
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public async Task<decimal?> GetQuoteAmountAsync(Guid tokenId, CancellationToken ct = default)
+    {
+        var qa = await _db.TokenQuoteAmounts.FindAsync([tokenId], ct);
+        return qa?.QuoteAmount;
     }
 }

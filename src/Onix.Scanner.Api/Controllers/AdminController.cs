@@ -59,7 +59,9 @@ public class AdminController : ControllerBase
                 case "solanamint": existing.SolanaMint = prop.Value.GetString()!; break;
                 case "bingxsymbol": existing.BingxSymbol = prop.Value.GetString()!; break;
                 case "jupiterinputmint": existing.JupiterInputMint = prop.Value.GetString()!; break;
-                case "quoteamount": existing.QuoteAmount = prop.Value.GetDecimal(); break;
+                case "quoteamount":
+                    await _tokenRepo.SetQuoteAmountAsync(id, prop.Value.GetDecimal(), ct);
+                    break;
                 case "bingxurl": existing.BingxUrl = prop.Value.GetString()!; break;
                 case "jupiterurl": existing.JupiterUrl = prop.Value.GetString()!; break;
                 case "solscanurl": existing.SolscanUrl = prop.Value.GetString()!; break;

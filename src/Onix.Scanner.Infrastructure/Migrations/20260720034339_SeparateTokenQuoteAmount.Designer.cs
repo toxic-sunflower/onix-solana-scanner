@@ -12,8 +12,8 @@ using Onix.Scanner.Infrastructure.Data;
 namespace Onix.Scanner.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260720015630_AddUserTokenQuoteAmount")]
-    partial class AddUserTokenQuoteAmount
+    [Migration("20260720034339_SeparateTokenQuoteAmount")]
+    partial class SeparateTokenQuoteAmount
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -324,11 +324,6 @@ namespace Onix.Scanner.Infrastructure.Migrations
                     b.Property<Guid?>("ProxyId")
                         .HasColumnType("uuid");
 
-                    b.Property<decimal>("QuoteAmount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(38,18)")
-                        .HasDefaultValue(0.01m);
-
                     b.Property<string>("SolanaMint")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -373,6 +368,22 @@ namespace Onix.Scanner.Infrastructure.Migrations
                         .HasDatabaseName("idx_tokens_symbol");
 
                     b.ToTable("tokens", (string)null);
+                });
+
+            modelBuilder.Entity("Onix.Scanner.Shared.Models.TokenQuoteAmount", b =>
+                {
+                    b.Property<Guid>("TokenId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("QuoteAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(38,18)")
+                        .HasDefaultValue(0.01m);
+
+                    b.HasKey("TokenId");
+
+                    b.ToTable("token_quote_amounts", (string)null);
                 });
 
             modelBuilder.Entity("Onix.Scanner.Shared.Models.User", b =>
@@ -563,11 +574,6 @@ namespace Onix.Scanner.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(10,4)")
                         .HasDefaultValue(5.0m);
-
-                    b.Property<decimal>("QuoteAmount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(38,18)")
-                        .HasDefaultValue(100m);
 
                     b.Property<bool>("TelegramEnabled")
                         .ValueGeneratedOnAdd()

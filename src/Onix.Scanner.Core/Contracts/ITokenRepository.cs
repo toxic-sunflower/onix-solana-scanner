@@ -18,4 +18,6 @@ public interface ITokenRepository
     Task RemoveUserTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
     Task<Dictionary<Guid, int>> GetTokenUserCountsAsync(CancellationToken ct = default);
     Task AddDefaultTokensAsync(Guid userId, CancellationToken ct = default);
+    Task SetQuoteAmountAsync(Guid tokenId, decimal amount, CancellationToken ct = default);
+    Task<decimal?> GetQuoteAmountAsync(Guid tokenId, CancellationToken ct = default);
 }

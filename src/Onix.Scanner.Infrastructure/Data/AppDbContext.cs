@@ -16,6 +16,7 @@ public class AppDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<BlacklistedJti> BlacklistedJtis => Set<BlacklistedJti>();
     public DbSet<LoginToken> LoginTokens => Set<LoginToken>();
+    public DbSet<TokenQuoteAmount> TokenQuoteAmounts => Set<TokenQuoteAmount>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -33,7 +34,6 @@ public class AppDbContext : DbContext
             e.Property(x => x.SolanaMint).HasMaxLength(64).IsRequired();
             e.Property(x => x.BingxSymbol).HasMaxLength(50).IsRequired();
             e.Property(x => x.JupiterInputMint).HasMaxLength(64).IsRequired();
-            e.Property(x => x.QuoteAmount).HasColumnType("numeric(38,18)").HasDefaultValue(0.01m);
             e.Property(x => x.BingxUrl).IsRequired();
             e.Property(x => x.JupiterUrl).IsRequired();
             e.Property(x => x.SolscanUrl).IsRequired();
@@ -46,6 +46,13 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.Symbol).HasDatabaseName("idx_tokens_symbol");
             e.HasIndex(x => x.Enabled).HasDatabaseName("idx_tokens_enabled");
             e.HasIndex(x => x.SolanaMint).IsUnique().HasDatabaseName("idx_tokens_solana_mint");
+        });
+
+        modelBuilder.Entity<TokenQuoteAmount>(e =>
+        {
+            e.ToTable("token_quote_amounts");
+            e.HasKey(x => x.TokenId);
+            e.Property(x => x.QuoteAmount).HasColumnType("numeric(38,18)").HasDefaultValue(0.01m);
         });
 
         modelBuilder.Entity<Proxy>(e =>
@@ -106,7 +113,6 @@ public class AppDbContext : DbContext
             e.HasKey(x => new { x.UserId, x.TokenId });
             e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
             e.Property(x => x.AlertThresholdPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
-            e.Property(x => x.QuoteAmount).HasColumnType("numeric(38,18)").HasDefaultValue(100m);
         });
 
         modelBuilder.Entity<SpreadTick>(e =>

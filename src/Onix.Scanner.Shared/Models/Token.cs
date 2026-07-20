@@ -9,7 +9,6 @@ public class Token
     public string BingxSymbol { get; set; } = string.Empty;
     public string JupiterInputMint { get; set; } = string.Empty;
     public int Decimals { get; set; } = 9;
-    public decimal QuoteAmount { get; set; }
     public string BingxUrl { get; set; } = string.Empty;
     public string JupiterUrl { get; set; } = string.Empty;
     public string SolscanUrl { get; set; } = string.Empty;
