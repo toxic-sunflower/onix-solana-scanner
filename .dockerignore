@@ -7,3 +7,4 @@ obj/
 .gitattributes
 *.sln
 *.slnx
+src/Onix.Scanner.Api/wwwroot/
