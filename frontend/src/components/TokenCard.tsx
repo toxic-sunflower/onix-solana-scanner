@@ -54,7 +54,7 @@ export default function TokenCard({ token, flash, ticks, onClickChart, onClickHi
   const recentLog = ticks?.slice(0, 6) ?? [];
 
   return (
-    <div className={`bg-[#16171d] rounded-lg border border-[#2a2b36] p-3.5 flex flex-col gap-2.5 slide-in ${flashClass}`}>
+    <div className={`bg-[#16171d] rounded-lg border border-[#2a2b36] p-3.5 flex flex-col gap-2.5 slide-in ${flashClass} group`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className={`w-2.5 h-2.5 rounded-full ${hasBoth ? 'bg-[#22c55e]' : hasBingx || hasJupiter ? 'bg-[#f59e0b] shimmer' : 'bg-[#64748b]'}`} />
@@ -62,16 +62,19 @@ export default function TokenCard({ token, flash, ticks, onClickChart, onClickHi
           {token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
           {updatedTxt && <span className="text-sm text-[#475569] tabular-nums">{updatedTxt}</span>}
         </div>
+        <div className="flex items-center gap-2">
+          {onPin && (
+            <button onClick={() => onPin(token.id, !isPinned)}
+              title={isPinned ? 'Unpin' : 'Pin'}
+              className={`text-sm transition-all ${isPinned ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+              📌
+            </button>
+          )}
           <span className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${spreadAbs > 0 ? (token.spreadPct > 0 ? 'text-[#22c55e]' : 'text-[#ef4444]') : 'text-[#64748b]'}`}>
             {spreadAbs > 0 ? `${token.spreadPct >= 0 ? '+' : ''}${token.spreadPct.toFixed(2)}%` : '---'}
             {spreadDir && <span className="text-3xl ml-1">{spreadDir}</span>}
           </span>
-          {onPin && (
-            <button onClick={() => onPin(token.id, !isPinned)}
-              className={`ml-2 text-sm transition-colors ${isPinned ? 'text-[#f59e0b]' : 'text-[#475569] hover:text-[#94a3b8]'}`}>
-              📌
-            </button>
-          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
