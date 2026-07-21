@@ -7,6 +7,8 @@ interface Props {
   ticks?: TickPoint[];
   onClickChart: (id: string) => void;
   onClickHistory: (id: string) => void;
+  isPinned?: boolean;
+  onPin?: (tokenId: string, isPinned: boolean) => void;
 }
 
 function ago(utcStr?: string): string {
@@ -20,7 +22,7 @@ function ago(utcStr?: string): string {
   return `${Math.floor(min / 60)}h`;
 }
 
-export default function TokenCard({ token, flash, ticks, onClickChart, onClickHistory }: Props) {
+export default function TokenCard({ token, flash, ticks, onClickChart, onClickHistory, isPinned, onPin }: Props) {
   const hasBingx = (token.bingxAskPrice ?? 0) > 0;
   const hasJupiter = (token.jupiterBuyPrice ?? 0) > 0;
   const hasBoth = hasBingx && hasJupiter;
@@ -60,10 +62,16 @@ export default function TokenCard({ token, flash, ticks, onClickChart, onClickHi
           {token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
           {updatedTxt && <span className="text-sm text-[#475569] tabular-nums">{updatedTxt}</span>}
         </div>
-        <span className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${spreadAbs > 0 ? (token.spreadPct > 0 ? 'text-[#22c55e]' : 'text-[#ef4444]') : 'text-[#64748b]'}`}>
-          {spreadAbs > 0 ? `${token.spreadPct >= 0 ? '+' : ''}${token.spreadPct.toFixed(2)}%` : '---'}
-          {spreadDir && <span className="text-3xl ml-1">{spreadDir}</span>}
-        </span>
+          <span className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${spreadAbs > 0 ? (token.spreadPct > 0 ? 'text-[#22c55e]' : 'text-[#ef4444]') : 'text-[#64748b]'}`}>
+            {spreadAbs > 0 ? `${token.spreadPct >= 0 ? '+' : ''}${token.spreadPct.toFixed(2)}%` : '---'}
+            {spreadDir && <span className="text-3xl ml-1">{spreadDir}</span>}
+          </span>
+          {onPin && (
+            <button onClick={() => onPin(token.id, !isPinned)}
+              className={`ml-2 text-sm transition-colors ${isPinned ? 'text-[#f59e0b]' : 'text-[#475569] hover:text-[#94a3b8]'}`}>
+              📌
+            </button>
+          )}
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">

@@ -132,20 +132,13 @@ export default function Dashboard({ onNavigate }: Props) {
 
       <div className="flex flex-col gap-2.5">
         {filtered.map(t => (
-          <div key={t.id}>
-            <div className="flex items-center gap-1.5 mb-0.5 px-1">
-              <button onClick={() => doPin(t.id, !t.isPinned)}
-                className={`text-xs transition-colors cursor-pointer ${t.isPinned ? 'text-[#f59e0b]' : 'text-[#2a2b36] hover:text-[#64748b]'}`}>
-                {t.isPinned ? '★' : '☆'}
-              </button>
-              <span className="text-sm font-semibold text-[#f1f5f9]">{t.symbol}</span>
-            </div>
-            <TokenCard token={t as unknown as UserTokenDto}
-              flash={flashMap.current.get(t.id) ?? null}
-              ticks={ticks.get(t.id)}
-              onClickChart={(id) => onNavigate('chart', id)}
-              onClickHistory={(id) => onNavigate('history', id)} />
-          </div>
+          <TokenCard key={t.id} token={t as unknown as UserTokenDto}
+            flash={flashMap.current.get(t.id) ?? null}
+            ticks={ticks.get(t.id)}
+            isPinned={t.isPinned}
+            onPin={doPin}
+            onClickChart={(id) => onNavigate('chart', id)}
+            onClickHistory={(id) => onNavigate('history', id)} />
         ))}
         {filtered.length === 0 && (
           <p className="text-sm text-[#64748b] text-center py-8">No tokens</p>
