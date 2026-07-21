@@ -30,8 +30,34 @@ export default function Dashboard({ onNavigate }: Props) {
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
+  const [now, setNow] = useState(Date.now());
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  function ago(utcStr?: string): string {
+    if (!utcStr) return '—';
+    const ms = Date.now() - new Date(utcStr).getTime();
+    if (ms < 0) return 'now';
+    const sec = Math.floor(ms / 1000);
+    if (sec < 60) return `${sec}s`;
+    const min = Math.floor(sec / 60);
+    if (min < 60) return `${min}m`;
+    return `${Math.floor(min / 60)}h`;
+  }
+
+  const latestUpdate = useMemo(() => {
+    let latest: string | null = null;
+    for (const t of allTokens) {
+      if (t.lastUpdated && (!latest || t.lastUpdated > latest)) latest = t.lastUpdated;
+    }
+    return latest;
+  }, [allTokens]);
+  void now;
 
   const loadAll = useCallback(async () => {
     const res = await authFetch('/api/v1/tokens?cexOnly=true&take=200');
@@ -115,6 +141,7 @@ export default function Dashboard({ onNavigate }: Props) {
         <div className="flex items-center gap-3">
           <div className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-[#22c55e]' : 'bg-[#f59e0b] shimmer'}`} />
           <h2 className="text-lg font-bold text-[#f1f5f9]">Dashboard</h2>
+          <span className="text-xs text-[#475569] tabular-nums">{ago(latestUpdate)}</span>
         </div>
         <div className="flex gap-2">
           <button onClick={() => onNavigate('settings')}
