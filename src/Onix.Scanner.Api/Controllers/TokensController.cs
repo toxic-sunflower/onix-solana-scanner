@@ -48,8 +48,8 @@ public class TokensController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("search")]
-    public async Task<ActionResult<object>> Search(
+    [HttpGet]
+    public async Task<ActionResult<object>> GetAll(
         [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int offset = 0, [FromQuery] int take = 25)
     {
         var tokens = await _tokenRepo.SearchAsync(q, cexOnly);
@@ -74,6 +74,10 @@ public class TokensController : ControllerBase
                 IsAvailableOnCex = t.IsAvailableOnCex,
                 Popularity = popularity.GetValueOrDefault(t.Id, 0),
                 IsPinned = pinnedIds?.Contains(t.Id) ?? false,
+                BingxSymbol = t.BingxSymbol,
+                BingxUrl = t.BingxUrl,
+                JupiterUrl = t.JupiterUrl,
+                SolscanUrl = t.SolscanUrl,
             };
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
             {
@@ -89,6 +93,11 @@ public class TokensController : ControllerBase
             return dto;
         }).ToList();
 
+        if (cexOnly == true)
+        {
+            all = all.Where(t => t.SpreadPct != null).ToList();
+        }
+
         all.Sort((a, b) =>
         {
             var aPin = a.IsPinned ? 0 : 1;
@@ -103,46 +112,6 @@ public class TokensController : ControllerBase
         var total = all.Count;
         var items = all.Skip(offset).Take(take).ToList();
         return Ok(new { items, total });
-    }
-
-    [HttpGet]
-    public async Task<ActionResult<List<TokenCardDto>>> GetAll()
-    {
-        var tokens = await _tokenRepo.GetAllAsync();
-        var result = tokens.Select(t =>
-        {
-            if (_snapshotPool.TryGetIndex(t.Id, out var idx))
-            {
-                var snap = _snapshotPool.ReadSnapshot(idx);
-                return new TokenCardDto
-                {
-                    Id = t.Id,
-                    Symbol = t.Symbol,
-                    BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
-                    JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
-                    SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
-                    Status = t.Status,
-                    LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
-                        ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
-                        : null,
-                    BingxUrl = t.BingxUrl,
-                    JupiterUrl = t.JupiterUrl,
-                    SolscanUrl = t.SolscanUrl
-                };
-            }
-
-            return new TokenCardDto
-            {
-                Id = t.Id,
-                Symbol = t.Symbol,
-                Status = t.Status,
-                BingxUrl = t.BingxUrl,
-                JupiterUrl = t.JupiterUrl,
-                SolscanUrl = t.SolscanUrl
-            };
-        }).ToList();
-
-        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]

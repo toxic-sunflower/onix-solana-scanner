@@ -8,11 +8,15 @@ interface TokenInfo {
   id: string;
   symbol: string;
   name?: string;
+  solanaMint?: string;
   isPinned: boolean;
   spreadPct?: number | null;
   bingxAskPrice?: number | null;
   jupiterBuyPrice?: number | null;
   lastUpdated?: string | null;
+  bingxUrl?: string;
+  jupiterUrl?: string;
+  solscanUrl?: string;
 }
 
 interface Props {
@@ -30,7 +34,7 @@ export default function Dashboard({ onNavigate }: Props) {
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
 
   const loadAll = useCallback(async () => {
-    const res = await authFetch('/api/v1/tokens/search?cexOnly=true&take=200');
+    const res = await authFetch('/api/v1/tokens?cexOnly=true&take=200');
     if (res.ok) {
       const data = await res.json();
       setAllTokens(data.items ?? data);

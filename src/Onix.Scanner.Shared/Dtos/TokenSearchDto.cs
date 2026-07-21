@@ -10,6 +10,10 @@ public class TokenSearchDto
     public int Decimals { get; set; }
     public bool IsAvailableOnCex { get; set; }
     public int Popularity { get; set; }
+    public string? BingxSymbol { get; set; }
+    public string? BingxUrl { get; set; }
+    public string? JupiterUrl { get; set; }
+    public string? SolscanUrl { get; set; }
     public decimal? BingxAskPrice { get; set; }
     public decimal? JupiterBuyPrice { get; set; }
     public decimal? SpreadPct { get; set; }

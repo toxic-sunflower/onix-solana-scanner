@@ -60,6 +60,7 @@ export default function TokenCard({ token, flash, ticks, onClickChart, onClickHi
           <span className={`w-2.5 h-2.5 rounded-full ${hasBoth ? 'bg-[#22c55e]' : hasBingx || hasJupiter ? 'bg-[#f59e0b] shimmer' : 'bg-[#64748b]'}`} />
           <span className="font-bold text-base text-[#f1f5f9]">{token.symbol}</span>
           {token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
+          {token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline truncate max-w-[140px]" title={token.solanaMint}>{token.solanaMint}</span>}
           {updatedTxt && <span className="text-sm text-[#475569] tabular-nums">{updatedTxt}</span>}
         </div>
         <div className="flex items-center gap-2">
