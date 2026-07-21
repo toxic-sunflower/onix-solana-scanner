@@ -156,25 +156,21 @@ public class TokenRepository : ITokenRepository
     public async Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default)
     {
         var ut = await _db.UserTokens.FindAsync([userId, tokenId], ct);
-        if (ut is not null)
+        if (ut is null)
+        {
+            _db.UserTokens.Add(new UserToken { UserId = userId, TokenId = tokenId, IsPinned = isPinned });
+        }
+        else
         {
             ut.IsPinned = isPinned;
-            await _db.SaveChangesAsync(ct);
         }
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task<HashSet<Guid>> GetPinnedTokenIdsAsync(Guid userId, CancellationToken ct = default)
     {
         return (await _db.UserTokens
             .Where(ut => ut.UserId == userId && ut.IsPinned)
-            .Select(ut => ut.TokenId)
-            .ToListAsync(ct)).ToHashSet();
-    }
-
-    public async Task<HashSet<Guid>> GetUserTokenIdsAsync(Guid userId, CancellationToken ct = default)
-    {
-        return (await _db.UserTokens
-            .Where(ut => ut.UserId == userId)
             .Select(ut => ut.TokenId)
             .ToListAsync(ct)).ToHashSet();
     }

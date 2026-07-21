@@ -57,11 +57,9 @@ public class TokensController : ControllerBase
 
         var userId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : (Guid?)null;
         HashSet<Guid>? pinnedIds = null;
-        HashSet<Guid>? trackedIds = null;
         if (userId.HasValue)
         {
             pinnedIds = await _tokenRepo.GetPinnedTokenIdsAsync(userId.Value);
-            trackedIds = await _tokenRepo.GetUserTokenIdsAsync(userId.Value);
         }
 
         var all = tokens.Select(t =>
@@ -75,7 +73,6 @@ public class TokensController : ControllerBase
                 Decimals = t.Decimals,
                 IsAvailableOnCex = t.IsAvailableOnCex,
                 Popularity = popularity.GetValueOrDefault(t.Id, 0),
-                IsTracked = trackedIds?.Contains(t.Id) ?? false,
                 IsPinned = pinnedIds?.Contains(t.Id) ?? false,
             };
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))

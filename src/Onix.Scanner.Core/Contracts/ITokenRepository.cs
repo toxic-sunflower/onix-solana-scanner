@@ -22,5 +22,4 @@ public interface ITokenRepository
     Task<decimal?> GetQuoteAmountAsync(Guid tokenId, CancellationToken ct = default);
     Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default);
     Task<HashSet<Guid>> GetPinnedTokenIdsAsync(Guid userId, CancellationToken ct = default);
-    Task<HashSet<Guid>> GetUserTokenIdsAsync(Guid userId, CancellationToken ct = default);
 }

@@ -8,8 +8,6 @@ interface TokenInfo {
   id: string;
   symbol: string;
   name?: string;
-  isAvailableOnCex: boolean;
-  isTracked: boolean;
   isPinned: boolean;
   spreadPct?: number | null;
   bingxAskPrice?: number | null;
@@ -21,14 +19,13 @@ interface Props {
   onNavigate: (page: string, tokenId?: string) => void;
 }
 
-type FilterType = 'all' | 'tracked' | 'untracked' | 'positive';
+type FilterType = 'all' | 'positive';
 
 export default function Dashboard({ onNavigate }: Props) {
   const [allTokens, setAllTokens] = useState<TokenInfo[]>([]);
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
-  const [pinningId, setPinningId] = useState<string | null>(null);
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
 
@@ -90,28 +87,12 @@ export default function Dashboard({ onNavigate }: Props) {
   }, []);
 
   const doPin = async (id: string, isPinned: boolean) => {
-    setPinningId(id);
     await authFetch(`/api/v1/user-tokens/${id}/pin`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ isPinned }),
     });
-    setPinningId(null);
     setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isPinned } : t));
-  };
-
-  const doTrack = async (id: string) => {
-    await authFetch('/api/v1/user-tokens', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tokenId: id }),
-    });
-    setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isTracked: true } : t));
-  };
-
-  const doUntrack = async (id: string) => {
-    await authFetch(`/api/v1/user-tokens/${id}`, { method: 'DELETE' });
-    setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isTracked: false, isPinned: false } : t));
   };
 
   const filtered = useMemo(() => {
@@ -120,9 +101,7 @@ export default function Dashboard({ onNavigate }: Props) {
       const q = search.toLowerCase();
       list = list.filter(t => t.symbol.toLowerCase().includes(q) || (t.name ?? '').toLowerCase().includes(q));
     }
-    if (filter === 'tracked') list = list.filter(t => t.isTracked);
-    else if (filter === 'untracked') list = list.filter(t => !t.isTracked);
-    else if (filter === 'positive') list = list.filter(t => t.spreadPct != null && t.spreadPct > 0);
+    if (filter === 'positive') list = list.filter(t => t.spreadPct != null && t.spreadPct > 0);
     return list;
   }, [allTokens, filter, search]);
 
@@ -140,10 +119,10 @@ export default function Dashboard({ onNavigate }: Props) {
       </div>
 
       <div className="flex gap-1.5 mb-3 flex-wrap items-center">
-        {(['all', 'tracked', 'untracked', 'positive'] as const).map(v => (
+        {(['all', 'positive'] as const).map(v => (
           <button key={v} onClick={() => setFilter(v)}
             className={`px-2.5 py-1 rounded text-xs transition-colors ${filter === v ? 'bg-[#d97706] text-black font-medium' : 'bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8]'}`}>
-            {v === 'all' ? 'All' : v === 'tracked' ? 'Tracked' : v === 'untracked' ? 'Untracked' : 'Positive'}
+            {v === 'all' ? 'All' : 'Positive spread'}
           </button>
         ))}
         <input type="text" placeholder="Search..."
@@ -153,22 +132,13 @@ export default function Dashboard({ onNavigate }: Props) {
 
       <div className="flex flex-col gap-2.5">
         {filtered.map(t => (
-          <div key={t.id} className="relative">
-            <div className="flex items-center gap-1.5 mb-1 px-1">
-              <button
-                onClick={() => t.isTracked && doPin(t.id, !t.isPinned)}
-                disabled={!t.isTracked || pinningId === t.id}
-                className={`text-xs transition-colors ${t.isPinned ? 'text-[#f59e0b]' : 'text-[#2a2b36] hover:text-[#64748b]'} ${!t.isTracked ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+          <div key={t.id}>
+            <div className="flex items-center gap-1.5 mb-0.5 px-1">
+              <button onClick={() => doPin(t.id, !t.isPinned)}
+                className={`text-xs transition-colors cursor-pointer ${t.isPinned ? 'text-[#f59e0b]' : 'text-[#2a2b36] hover:text-[#64748b]'}`}>
                 {t.isPinned ? '★' : '☆'}
               </button>
               <span className="text-sm font-semibold text-[#f1f5f9]">{t.symbol}</span>
-              {t.isTracked ? (
-                <button onClick={() => doUntrack(t.id)}
-                  className="ml-auto px-2 py-0.5 text-[10px] rounded bg-[#2a2b36] text-[#94a3b8] hover:text-[#ef4444] hover:bg-[#3a2a2a] transition-colors">Remove</button>
-              ) : (
-                <button onClick={() => doTrack(t.id)}
-                  className="ml-auto px-2 py-0.5 text-[10px] font-medium rounded bg-[#d97706] text-black hover:bg-[#b45309] transition-colors">+Track</button>
-              )}
             </div>
             <TokenCard token={t as unknown as UserTokenDto}
               flash={flashMap.current.get(t.id) ?? null}
