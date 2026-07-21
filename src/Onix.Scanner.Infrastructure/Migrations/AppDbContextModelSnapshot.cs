@@ -572,11 +572,6 @@ namespace Onix.Scanner.Infrastructure.Migrations
                         .HasColumnType("numeric(10,4)")
                         .HasDefaultValue(5.0m);
 
-                    b.Property<bool>("IsPinned")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
-
                     b.Property<bool>("TelegramEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")

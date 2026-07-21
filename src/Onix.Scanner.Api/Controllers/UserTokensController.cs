@@ -86,14 +86,6 @@ public class UserTokensController : ControllerBase
         return NoContent();
     }
 
-    [HttpPatch("{tokenId:guid}/pin")]
-    public async Task<ActionResult> PinToken(Guid tokenId, [FromBody] PinTokenRequest request, CancellationToken ct)
-    {
-        var userId = User.GetUserId();
-        await _tokenRepo.PinTokenAsync(userId, tokenId, request.IsPinned, ct);
-        return NoContent();
-    }
-
     private static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
     {
         if (bingxRaw == 0 || jupiterRaw == 0) return 0;
@@ -104,5 +96,4 @@ public class UserTokensController : ControllerBase
     }
 
     public record AddTokenRequest(Guid TokenId);
-    public record PinTokenRequest(bool IsPinned);
 }

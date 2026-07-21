@@ -6,5 +6,4 @@ public class UserToken
     public Guid TokenId { get; set; }
     public bool TelegramEnabled { get; set; } = true;
     public decimal AlertThresholdPct { get; set; } = 5m;
-    public bool IsPinned { get; set; }
 }

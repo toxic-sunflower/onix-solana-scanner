@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Dtos;
@@ -55,15 +54,6 @@ public class TokensController : ControllerBase
         var tokens = await _tokenRepo.SearchAsync(q, cexOnly);
         var popularity = await _tokenRepo.GetTokenUserCountsAsync();
 
-        var userId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : (Guid?)null;
-        HashSet<Guid>? pinnedIds = null;
-        HashSet<Guid>? trackedIds = null;
-        if (userId.HasValue)
-        {
-            pinnedIds = await _tokenRepo.GetPinnedTokenIdsAsync(userId.Value);
-            trackedIds = await _tokenRepo.GetUserTokenIdsAsync(userId.Value);
-        }
-
         var all = tokens.Select(t =>
         {
             var dto = new TokenSearchDto
@@ -75,8 +65,6 @@ public class TokensController : ControllerBase
                 Decimals = t.Decimals,
                 IsAvailableOnCex = t.IsAvailableOnCex,
                 Popularity = popularity.GetValueOrDefault(t.Id, 0),
-                IsTracked = trackedIds?.Contains(t.Id) ?? false,
-                IsPinned = pinnedIds?.Contains(t.Id) ?? false,
             };
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
             {
@@ -94,13 +82,18 @@ public class TokensController : ControllerBase
 
         all.Sort((a, b) =>
         {
-            var aPin = a.IsPinned ? 0 : 1;
-            var bPin = b.IsPinned ? 0 : 1;
-            if (aPin != bPin) return aPin - bPin;
+            var aHasSpread = a.IsAvailableOnCex && a.SpreadPct is > 0 ? 0 : 1;
+            var bHasSpread = b.IsAvailableOnCex && b.SpreadPct is > 0 ? 0 : 1;
+            if (aHasSpread != bHasSpread) return aHasSpread - bHasSpread;
 
-            var aSpread = a.SpreadPct ?? 0;
-            var bSpread = b.SpreadPct ?? 0;
-            return bSpread.CompareTo(aSpread);
+            var aCex = a.IsAvailableOnCex ? 0 : 1;
+            var bCex = b.IsAvailableOnCex ? 0 : 1;
+            if (aCex != bCex) return aCex - bCex;
+
+            var cmp = b.Popularity.CompareTo(a.Popularity);
+            if (cmp != 0) return cmp;
+
+            return string.Compare(a.Symbol, b.Symbol, StringComparison.OrdinalIgnoreCase);
         });
 
         var total = all.Count;
