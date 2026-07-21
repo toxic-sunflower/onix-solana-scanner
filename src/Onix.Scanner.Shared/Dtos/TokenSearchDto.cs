@@ -6,6 +6,8 @@ public class TokenSearchDto
     public string Symbol { get; set; } = string.Empty;
     public string? Name { get; set; }
     public string SolanaMint { get; set; } = string.Empty;
+    public bool IsTracked { get; set; }
+    public bool IsPinned { get; set; }
     public int Decimals { get; set; }
     public bool IsAvailableOnCex { get; set; }
     public int Popularity { get; set; }
