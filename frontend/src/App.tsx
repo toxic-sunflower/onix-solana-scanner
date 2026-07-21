@@ -77,6 +77,7 @@ function DashboardRoute() {
       onNavigate={(page, tokenId) => {
         if (page === 'chart' && tokenId) navigate(`/chart/${tokenId}`);
         else if (page === 'history' && tokenId) navigate(`/history/${tokenId}`);
+        else if (page === 'settings') navigate('/settings');
         else navigate('/');
       }}
     />
