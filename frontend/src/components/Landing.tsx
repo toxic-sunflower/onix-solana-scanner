@@ -48,6 +48,9 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
     if (widgetLoaded.current) return;
     widgetLoaded.current = true;
 
+    const container = document.getElementById('telegram-login-widget');
+    if (!container) return;
+
     const script = document.createElement('script');
     script.src = 'https://telegram.org/js/telegram-widget.js?22';
     script.async = true;
@@ -55,7 +58,7 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
     script.setAttribute('data-size', 'large');
     script.setAttribute('data-request-access', 'write');
     script.setAttribute('data-onauth', 'onTelegramAuth(user)');
-    document.body.appendChild(script);
+    container.appendChild(script);
 
     (window as any).onTelegramAuth = (user: TgUser) => {
       setLoading(true);
