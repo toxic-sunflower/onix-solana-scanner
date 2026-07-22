@@ -48,7 +48,8 @@ public sealed class MigratorService : IHostedService
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "All 10 migration attempts failed — continuing without DB");
+                _logger.LogCritical(ex, "All 10 migration attempts failed — refusing to start with a mismatched schema");
+                throw;
             }
         }
     }
