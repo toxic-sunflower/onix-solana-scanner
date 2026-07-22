@@ -6,8 +6,8 @@ RUN npm ci && npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /repo
-COPY --from=frontend /build/src/Onix.Scanner.Api/wwwroot ./src/Onix.Scanner.Api/wwwroot
 COPY . .
+COPY --from=frontend /build/src/Onix.Scanner.Api/wwwroot ./src/Onix.Scanner.Api/wwwroot
 RUN dotnet publish src/Onix.Scanner.Api/Onix.Scanner.Api.csproj -c Release -o /publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime

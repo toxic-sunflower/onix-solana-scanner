@@ -22,6 +22,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD,APP_URL
           script: |
+            set -e
             if [ ! -d /home/app/onix ]; then
               git clone $REPO_URL /home/app/onix
             fi
