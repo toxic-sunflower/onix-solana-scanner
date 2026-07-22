@@ -1,7 +1,0 @@
-# Install with: sudo visudo -f /etc/sudoers.d/onix-deploy
-# (paste this file's contents, save, exit)
-#
-# Grants the deploy user "app" exactly one narrowly-scoped, no-argument
-# command — no wildcards, so it satisfies modern sudo's restriction on
-# wildcards in command arguments.
-app ALL=(root) NOPASSWD: /usr/local/bin/onix-switch-nginx.sh
