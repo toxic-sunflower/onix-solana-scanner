@@ -81,6 +81,20 @@ public class AuthController : ControllerBase
         });
     }
 
+    [Authorize]
+    [HttpGet("check")]
+    public ActionResult Check()
+    {
+        var telegramIdClaim = User.FindFirstValue("telegram_id");
+        return Ok(new
+        {
+            userId = User.GetUserId().ToString(),
+            telegramId = telegramIdClaim != null ? (long?)long.Parse(telegramIdClaim) : null,
+            role = User.FindFirstValue(ClaimTypes.Role),
+            tier = User.FindFirstValue("tier"),
+        });
+    }
+
     [HttpPost("refresh")]
     public async Task<ActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
     {
