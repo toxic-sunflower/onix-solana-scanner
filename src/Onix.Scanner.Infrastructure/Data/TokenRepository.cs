@@ -79,6 +79,7 @@ public class TokenRepository : ITokenRepository
                 existing.BingxSymbol = token.BingxSymbol;
                 existing.BingxUrl = token.BingxUrl;
                 existing.JupiterInputMint = token.JupiterInputMint;
+                existing.JupiterInputDecimals = token.JupiterInputDecimals;
                 existing.JupiterUrl = token.JupiterUrl;
                 existing.SolscanUrl = token.SolscanUrl;
                 existing.IsAvailableOnCex = token.IsAvailableOnCex;
