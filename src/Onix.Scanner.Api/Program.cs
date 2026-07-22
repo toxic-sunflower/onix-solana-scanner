@@ -67,17 +67,27 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                var authHeader = context.Request.Headers["X-Auth-Token"].FirstOrDefault();
-                if (!string.IsNullOrEmpty(authHeader))
+                // Standard Authorization: Bearer header (used by SignalR negotiate)
+                var auth = context.Request.Headers.Authorization.FirstOrDefault();
+                if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
-                    context.Token = authHeader;
+                    context.Token = auth["Bearer ".Length..].Trim();
                     return Task.CompletedTask;
                 }
 
-                var accessToken = context.Request.Query["access_token"].FirstOrDefault();
-                if (!string.IsNullOrEmpty(accessToken))
+                // Custom X-Auth-Token header (used by authFetch)
+                var xauth = context.Request.Headers["X-Auth-Token"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(xauth))
                 {
-                    context.Token = accessToken;
+                    context.Token = xauth;
+                    return Task.CompletedTask;
+                }
+
+                // Query string token (used by SignalR WebSocket)
+                var qtoken = context.Request.Query["access_token"].FirstOrDefault();
+                if (!string.IsNullOrEmpty(qtoken))
+                {
+                    context.Token = qtoken;
                 }
                 return Task.CompletedTask;
             }
