@@ -24,32 +24,6 @@ public class TokensController : ControllerBase
         _snapshotPool = snapshotPool;
     }
 
-    [HttpGet("debug/snapshots")]
-    public ActionResult<object> DebugSnapshots()
-    {
-        var tokens = _tokenRepo.GetAllAsync(CancellationToken.None).Result;
-        var result = new List<object>();
-        foreach (var t in tokens.Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.BingxSymbol)))
-        {
-            if (!_snapshotPool.TryGetIndex(t.Id, out var idx)) continue;
-            ref var snap = ref _snapshotPool.GetSnapshot(idx);
-            result.Add(new
-            {
-                symbol = t.Symbol,
-                bingxSymbol = t.BingxSymbol,
-                bingxPrice = snap.BingxAskPriceRaw / 1e18m,
-                jupiterPrice = snap.JupiterBuyPriceRaw / 1e18m,
-                spread = snap.BingxAskPriceRaw != 0 && snap.JupiterBuyPriceRaw != 0
-                    ? (snap.BingxAskPriceRaw - snap.JupiterBuyPriceRaw) / (decimal)snap.JupiterBuyPriceRaw * 100
-                    : 0,
-                bingxTs = new DateTime(snap.BingxTimestampUtc, DateTimeKind.Utc),
-                jupiterTs = new DateTime(snap.JupiterTimestampUtc, DateTimeKind.Utc),
-                seq = snap.Sequence
-            });
-        }
-        return Ok(result);
-    }
-
     [HttpGet]
     public async Task<ActionResult<object>> GetAll(
         [FromQuery] string? q, [FromQuery] bool? cexOnly, [FromQuery] int offset = 0, [FromQuery] int take = 25)
@@ -86,7 +60,7 @@ public class TokensController : ControllerBase
                 var snap = _snapshotPool.ReadSnapshot(idx);
                 dto.BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : null;
                 dto.JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : null;
-                dto.SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
+                dto.SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
                 dto.Status = t.Status;
                 dto.LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                     ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
@@ -131,7 +105,7 @@ public class TokensController : ControllerBase
                 Symbol = token.Symbol,
                 BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
                 JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
-                SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
+                SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
                 Status = token.Status,
                 LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                     ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
@@ -153,12 +127,4 @@ public class TokensController : ControllerBase
         });
     }
 
-    private static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
-    {
-        if (bingxRaw == 0 || jupiterRaw == 0) return 0;
-        var bingx = (decimal)bingxRaw / 1e18m;
-        var jupiter = (decimal)jupiterRaw / 1e18m;
-        if (jupiter == 0) return 0;
-        return (bingx - jupiter) / jupiter * 100;
-    }
 }

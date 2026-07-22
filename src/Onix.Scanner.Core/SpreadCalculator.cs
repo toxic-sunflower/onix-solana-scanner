@@ -12,7 +12,7 @@ public static class SpreadCalculator
 
     public static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
     {
-        if (jupiterRaw == 0) return 0;
+        if (bingxRaw == 0 || jupiterRaw == 0) return 0;
         var bingx = (decimal)bingxRaw / 1e18m;
         var jupiter = (decimal)jupiterRaw / 1e18m;
         if (jupiter == 0) return 0;
@@ -26,6 +26,8 @@ public static class SpreadCalculator
         if (string.IsNullOrWhiteSpace(token.SolanaMint)) return TokenHealthStatus.MappingRequired;
 
         var now = DateTime.UtcNow.Ticks;
+        if (Volatile.Read(ref snap.ProxyErrorUntilUtc) > now) return TokenHealthStatus.ProxyError;
+
         var thresholdTicks = staleThresholdMs * TimeSpan.TicksPerMillisecond;
         var bingxStale = now - Volatile.Read(ref snap.BingxTimestampUtc) > thresholdTicks;
         var jupiterStale = now - Volatile.Read(ref snap.JupiterTimestampUtc) > thresholdTicks;

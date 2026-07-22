@@ -20,7 +20,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: app
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD,APP_URL
+          envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD,APP_URL,TELEGRAM_OAUTH_CLIENT_ID,TELEGRAM_OAUTH_CLIENT_SECRET,TELEGRAM_OAUTH_REDIRECT_URI
           script: |
             set -e
             if [ ! -d /home/app/onix ]; then
@@ -35,6 +35,9 @@ jobs:
             TELEGRAM_BOT_USERNAME=OnixSolanaScanner_Bot
             ENCRYPTION_KEY=$ENCRYPTION_KEY
             APP_URL=$(echo "$APP_URL" | xargs)
+            TELEGRAM_OAUTH_CLIENT_ID=$TELEGRAM_OAUTH_CLIENT_ID
+            TELEGRAM_OAUTH_CLIENT_SECRET=$TELEGRAM_OAUTH_CLIENT_SECRET
+            TELEGRAM_OAUTH_REDIRECT_URI=$TELEGRAM_OAUTH_REDIRECT_URI
             EOF
 
             docker compose up -d --build
@@ -45,3 +48,6 @@ jobs:
           ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
           DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
           APP_URL: ${{ secrets.APP_URL }}
+          TELEGRAM_OAUTH_CLIENT_ID: ${{ secrets.TELEGRAM_OAUTH_CLIENT_ID }}
+          TELEGRAM_OAUTH_CLIENT_SECRET: ${{ secrets.TELEGRAM_OAUTH_CLIENT_SECRET }}
+          TELEGRAM_OAUTH_REDIRECT_URI: ${{ secrets.TELEGRAM_OAUTH_REDIRECT_URI }}

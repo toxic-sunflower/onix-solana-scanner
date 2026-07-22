@@ -153,6 +153,11 @@ public class TokenRepository : ITokenRepository
         return qa?.QuoteAmount;
     }
 
+    public async Task<Dictionary<Guid, decimal>> GetAllQuoteAmountsAsync(CancellationToken ct = default)
+    {
+        return await _db.TokenQuoteAmounts.ToDictionaryAsync(x => x.TokenId, x => x.QuoteAmount, ct);
+    }
+
     public async Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default)
     {
         var ut = await _db.UserTokens.FindAsync([userId, tokenId], ct);

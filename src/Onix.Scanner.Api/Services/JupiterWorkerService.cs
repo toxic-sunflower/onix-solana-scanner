@@ -8,26 +8,39 @@ using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Api.Services;
 
+/// <summary>
+/// One async worker task per enabled token. A token's failure/timeout never blocks
+/// other tokens; concurrency and pacing per proxy (or the shared/no-proxy group) is
+/// capped so free-tier rate limits aren't hammered.
+/// </summary>
 public sealed class JupiterWorkerService : BackgroundService
 {
     private readonly ITokenSnapshotPool _snapshotPool;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<JupiterWorkerService> _logger;
 
-    private const string PriceApiBase = "https://api.jup.ag/price/v3";
-    private const int ChunkSize = 100;
+    // NOTE: verify against https://developers.jup.ag/ before release (per TZ Appendix A) —
+    // the lite-api endpoint below is the current free-tier Quote API.
+    private const string QuoteApiBase = "https://lite-api.jup.ag/swap/v1/quote";
+    private const int PollIntervalMs = 1000;
+    private const int RequestTimeoutSeconds = 4;
+    private const int GroupConcurrency = 5;
+    private const int MinIntervalPerGroupMs = 250;
+    private static readonly TimeSpan ProxyErrorTtl = TimeSpan.FromSeconds(30);
+
     private static readonly HttpClient SharedHttp = new()
     {
-        Timeout = TimeSpan.FromSeconds(2),
+        Timeout = TimeSpan.FromSeconds(RequestTimeoutSeconds),
         DefaultRequestHeaders = { { "User-Agent", "OnixScanner/1.0" } }
     };
 
-    private readonly ConcurrentDictionary<string, GroupRateLimiter> _groupLimiters = new();
+    private readonly ConcurrentDictionary<string, GroupLimiter> _groupLimiters = new();
 
-    private sealed class GroupRateLimiter
+    private sealed class GroupLimiter
     {
-        public SemaphoreSlim Semaphore { get; } = new(1, 1);
-        public DateTime NextAllowed { get; set; } = DateTime.MinValue;
+        public SemaphoreSlim Concurrency { get; } = new(GroupConcurrency, GroupConcurrency);
+        public SemaphoreSlim Pacing { get; } = new(1, 1);
+        public DateTime NextAllowedStart { get; set; } = DateTime.MinValue;
     }
 
     public JupiterWorkerService(
@@ -47,92 +60,97 @@ public sealed class JupiterWorkerService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var tokenRepo = scope.ServiceProvider.GetRequiredService<ITokenRepository>();
             var proxyRepo = scope.ServiceProvider.GetRequiredService<IProxyRepository>();
+
             var tokens = await tokenRepo.GetAllAsync(stoppingToken);
             var proxies = await proxyRepo.GetAllAsync(stoppingToken);
+            var quoteAmounts = await tokenRepo.GetAllQuoteAmountsAsync(stoppingToken);
             var proxyMap = proxies.Where(p => p.Enabled).ToDictionary(p => p.Id);
 
             var enabled = tokens
-                .Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.SolanaMint))
+                .Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.SolanaMint) && !string.IsNullOrWhiteSpace(t.JupiterInputMint))
                 .ToList();
 
             if (enabled.Count > 0)
             {
-                var groups = enabled.GroupBy(t => t.ProxyId).ToList();
-                var tasks = groups.Select(group => ProcessGroupAsync(group, proxyMap, stoppingToken));
+                var tasks = enabled.Select(token =>
+                {
+                    var proxy = token.ProxyId.HasValue && proxyMap.TryGetValue(token.ProxyId.Value, out var p) ? p : null;
+                    var quoteAmount = quoteAmounts.GetValueOrDefault(token.Id, 0.01m);
+                    return FetchTokenQuoteAsync(token, proxy, quoteAmount, stoppingToken);
+                });
                 await Task.WhenAll(tasks);
             }
-            else
-            {
-                await Task.Delay(2000, stoppingToken);
-            }
+
+            await Task.Delay(PollIntervalMs, stoppingToken);
         }
     }
 
-    private async Task ProcessGroupAsync(IGrouping<Guid?, Token> group, Dictionary<Guid, Proxy> proxyMap, CancellationToken ct)
+    private async Task FetchTokenQuoteAsync(Token token, Proxy? proxy, decimal quoteAmount, CancellationToken ct)
     {
-        Proxy? proxy = group.Key.HasValue && proxyMap.TryGetValue(group.Key.Value, out var p) ? p : null;
-        var tokenList = group.ToList();
+        var groupKey = proxy?.Id.ToString() ?? "__shared";
+        var limiter = _groupLimiters.GetOrAdd(groupKey, _ => new GroupLimiter());
 
-        for (int i = 0; i < tokenList.Count; i += ChunkSize)
-        {
-            var chunk = tokenList.GetRange(i, Math.Min(ChunkSize, tokenList.Count - i));
-            await BatchFetchAsync(chunk, proxy, ct);
-        }
-    }
-
-    private async Task BatchFetchAsync(List<Token> tokens, Proxy? proxy, CancellationToken ct)
-    {
-        var key = proxy?.Id.ToString() ?? "__default";
-        var limiter = _groupLimiters.GetOrAdd(key, _ => new GroupRateLimiter());
-
-        await limiter.Semaphore.WaitAsync(ct);
+        await limiter.Concurrency.WaitAsync(ct);
         try
         {
-            var now = DateTime.UtcNow;
-            if (now < limiter.NextAllowed)
-                await Task.Delay(limiter.NextAllowed - now, ct);
-            limiter.NextAllowed = now.AddSeconds(2);
-
-            var httpClient = proxy is not null ? CreateProxyClient(proxy) : SharedHttp;
-            var ids = string.Join(",", tokens.Select(t => t.SolanaMint));
-            var url = $"{PriceApiBase}?ids={Uri.EscapeDataString(ids)}";
-
-            var sw = ValueStopwatch.StartNew();
-            using var httpResponse = await httpClient.GetAsync(url, ct);
-
-            if ((int)httpResponse.StatusCode == 429)
+            await limiter.Pacing.WaitAsync(ct);
+            try
             {
-                var backoff = Random.Shared.Next(30, 61);
-                limiter.NextAllowed = DateTime.UtcNow.AddSeconds(backoff);
-                _logger.LogWarning("Jupiter rate limited ({Key}), backing off {Backoff}s", key, backoff);
+                var now = DateTime.UtcNow;
+                if (now < limiter.NextAllowedStart)
+                    await Task.Delay(limiter.NextAllowedStart - now, ct);
+                limiter.NextAllowedStart = DateTime.UtcNow.AddMilliseconds(MinIntervalPerGroupMs);
+            }
+            finally
+            {
+                limiter.Pacing.Release();
+            }
+
+            var amountRaw = (long)Math.Round(quoteAmount * (decimal)Math.Pow(10, token.JupiterInputDecimals));
+            if (amountRaw <= 0)
+            {
+                _logger.LogTrace("Jupiter: skipping {Symbol}, non-positive amount", token.Symbol);
                 return;
             }
 
-            httpResponse.EnsureSuccessStatusCode();
-            var latencyMs = (int)sw.ElapsedMilliseconds;
-
-            var json = await httpResponse.Content.ReadAsStringAsync(ct);
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            foreach (var token in tokens)
+            var url = $"{QuoteApiBase}?inputMint={token.JupiterInputMint}&outputMint={token.SolanaMint}&amount={amountRaw}&slippageBps=50";
+            var httpClient = proxy is not null ? CreateProxyClient(proxy) : SharedHttp;
+            try
             {
-                if (!root.TryGetProperty(token.SolanaMint, out var entry) ||
-                    !entry.TryGetProperty("usdPrice", out var priceEl))
+                var sw = Stopwatch.StartNew();
+                using var response = await httpClient.GetAsync(url, ct);
+
+                if ((int)response.StatusCode == 429)
                 {
-                    _logger.LogTrace("Jupiter: no price for {Symbol}", token.Symbol);
-                    continue;
+                    limiter.NextAllowedStart = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
+                    _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group})", token.Symbol, groupKey);
+                    return;
                 }
 
-                var price = priceEl.GetDecimal();
-                if (price <= 0) continue;
+                response.EnsureSuccessStatusCode();
+                var latencyMs = (int)sw.ElapsedMilliseconds;
 
-                var scaled = price * 1e18m;
-                if (scaled > long.MaxValue || scaled < long.MinValue)
+                var json = await response.Content.ReadAsStringAsync(ct);
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (!root.TryGetProperty("inAmount", out var inEl) || !root.TryGetProperty("outAmount", out var outEl))
                 {
-                    _logger.LogTrace("Jupiter price overflow for {Symbol}: {Price}", token.Symbol, price);
-                    continue;
+                    _logger.LogTrace("Jupiter: no route for {Symbol}", token.Symbol);
+                    return;
                 }
+
+                if (!long.TryParse(inEl.GetString(), out var inAtomic) || !long.TryParse(outEl.GetString(), out var outAtomic))
+                    return;
+                if (inAtomic <= 0 || outAtomic <= 0) return;
+
+                var inAmount = inAtomic / (decimal)Math.Pow(10, token.JupiterInputDecimals);
+                var outAmount = outAtomic / (decimal)Math.Pow(10, token.Decimals);
+                var buyPrice = inAmount / outAmount;
+                if (buyPrice <= 0) return;
+
+                var scaled = buyPrice * 1e18m;
+                if (scaled > long.MaxValue || scaled < long.MinValue) return;
 
                 var idx = _snapshotPool.GetOrAddIndex(token.Id);
                 ref var snap = ref _snapshotPool.GetSnapshot(idx);
@@ -140,16 +158,32 @@ public sealed class JupiterWorkerService : BackgroundService
                 snap.JupiterTimestampUtc = DateTime.UtcNow.Ticks;
                 snap.JupiterLatencyMs = latencyMs;
                 snap.ProxyId = proxy?.Id;
+                snap.ProxyErrorUntilUtc = 0;
                 Interlocked.Increment(ref snap.Sequence);
             }
+            finally
+            {
+                if (proxy is not null && !ReferenceEquals(httpClient, SharedHttp))
+                    httpClient.Dispose();
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // shutting down
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "Jupiter batch fetch failed");
+            if (proxy is not null)
+            {
+                var idx = _snapshotPool.GetOrAddIndex(token.Id);
+                ref var snap = ref _snapshotPool.GetSnapshot(idx);
+                snap.ProxyErrorUntilUtc = DateTime.UtcNow.Add(ProxyErrorTtl).Ticks;
+            }
+            _logger.LogDebug(ex, "Jupiter quote failed for {Symbol}", token.Symbol);
         }
         finally
         {
-            limiter.Semaphore.Release();
+            limiter.Concurrency.Release();
         }
     }
 
@@ -169,14 +203,6 @@ public sealed class JupiterWorkerService : BackgroundService
             handler.Proxy = new WebProxy(uri);
         }
 
-        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(2) };
+        return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(RequestTimeoutSeconds) };
     }
-}
-
-internal readonly struct ValueStopwatch
-{
-    private readonly long _start;
-    private ValueStopwatch(long start) => _start = start;
-    public static ValueStopwatch StartNew() => new(Stopwatch.GetTimestamp());
-    public long ElapsedMilliseconds => (Stopwatch.GetTimestamp() - _start) * 1000 / Stopwatch.Frequency;
 }

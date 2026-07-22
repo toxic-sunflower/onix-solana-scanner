@@ -21,8 +21,6 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly ConcurrentDictionary<long, BotState> _states = new();
     private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
 
-    private readonly Dictionary<(Guid UserId, Guid TokenId), DateTime> _lastSignalTime = new();
-
     private readonly Channel<TokenCardDto> _alertChannel =
         Channel.CreateBounded<TokenCardDto>(100);
 
@@ -133,16 +131,20 @@ public sealed class TelegramNotificationService : BackgroundService
 
                     foreach (var sub in subscribers)
                     {
-                        if (dto.SpreadPct < sub.AlertThresholdPct) continue;
-
-                        var key = (sub.UserId, dto.Id);
-                        if (_lastSignalTime.TryGetValue(key, out var lastTime))
+                        if (dto.SpreadPct < sub.AlertThresholdPct)
                         {
-                            if (DateTime.UtcNow - lastTime < TimeSpan.FromSeconds(sub.CooldownSeconds))
-                                continue;
+                            // Rearm: once spread drops back below threshold, the next
+                            // crossing is allowed to signal immediately again.
+                            if (!sub.IsArmed)
+                                await userRepo.SetAlertStateAsync(sub.UserId, dto.Id, null, isArmed: true, stoppingToken);
+                            continue;
                         }
-                        _lastSignalTime[key] = DateTime.UtcNow;
 
+                        var cooldownElapsed = sub.LastSignalAt is null ||
+                            DateTime.UtcNow - sub.LastSignalAt.Value >= TimeSpan.FromSeconds(sub.CooldownSeconds);
+                        if (!sub.IsArmed && !cooldownElapsed) continue;
+
+                        await userRepo.SetAlertStateAsync(sub.UserId, dto.Id, DateTime.UtcNow, isArmed: false, stoppingToken);
                         await SendSignalAsync(sub.ChatId, dto, stoppingToken);
                     }
                 }

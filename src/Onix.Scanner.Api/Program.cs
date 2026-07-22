@@ -31,6 +31,12 @@ if (File.Exists(envPath))
         Environment.SetEnvironmentVariable("Telegram__BotToken", tgt);
     if (envs.TryGetValue("TELEGRAM_BOT_USERNAME", out var tgu))
         Environment.SetEnvironmentVariable("Telegram__BotUsername", tgu);
+    if (envs.TryGetValue("TELEGRAM_OAUTH_CLIENT_ID", out var tcid))
+        Environment.SetEnvironmentVariable("Telegram__OpenId__ClientId", tcid);
+    if (envs.TryGetValue("TELEGRAM_OAUTH_CLIENT_SECRET", out var tcs))
+        Environment.SetEnvironmentVariable("Telegram__OpenId__ClientSecret", tcs);
+    if (envs.TryGetValue("TELEGRAM_OAUTH_REDIRECT_URI", out var truri))
+        Environment.SetEnvironmentVariable("Telegram__OpenId__RedirectUri", truri);
     if (envs.TryGetValue("ENCRYPTION_KEY", out var ek))
         Environment.SetEnvironmentVariable("Encryption__Key", ek);
     if (envs.TryGetValue("APP_URL", out var au))
@@ -119,6 +125,8 @@ builder.Services.AddNpgsqlDataSource(connectionString);
 builder.Services.AddSingleton<IEncryptionService>(
     new AesEncryptionService(encryptionKey));
 builder.Services.AddSingleton(new JwtTokenService(jwtKey));
+builder.Services.AddHttpClient<TelegramOpenIdValidator>();
+builder.Services.AddHttpClient<TelegramOAuthClient>();
 
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
 builder.Services.AddScoped<ITokenRepository, TokenRepository>();

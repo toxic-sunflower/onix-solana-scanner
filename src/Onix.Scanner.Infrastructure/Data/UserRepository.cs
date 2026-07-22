@@ -188,7 +188,18 @@ public class UserRepository : IUserRepository
                           UserId = u.Id,
                            ChatId = u.ChatId!.Value,
                           AlertThresholdPct = ut.AlertThresholdPct,
-                          CooldownSeconds = up == null ? 300 : up.CooldownSeconds
+                          CooldownSeconds = up == null ? 300 : up.CooldownSeconds,
+                          LastSignalAt = ut.LastSignalAt,
+                          IsArmed = ut.IsArmed
                       }).ToListAsync(ct);
+    }
+
+    public async Task SetAlertStateAsync(Guid userId, Guid tokenId, DateTime? lastSignalAt, bool isArmed, CancellationToken ct = default)
+    {
+        var ut = await _db.UserTokens.FindAsync([userId, tokenId], ct);
+        if (ut is null) return;
+        if (lastSignalAt.HasValue) ut.LastSignalAt = lastSignalAt;
+        ut.IsArmed = isArmed;
+        await _db.SaveChangesAsync(ct);
     }
 }

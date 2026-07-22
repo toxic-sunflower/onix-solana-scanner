@@ -8,6 +8,7 @@ public class Token
     public string SolanaMint { get; set; } = string.Empty;
     public string BingxSymbol { get; set; } = string.Empty;
     public string JupiterInputMint { get; set; } = string.Empty;
+    public int JupiterInputDecimals { get; set; } = 6;
     public int Decimals { get; set; } = 9;
     public string BingxUrl { get; set; } = string.Empty;
     public string JupiterUrl { get; set; } = string.Empty;

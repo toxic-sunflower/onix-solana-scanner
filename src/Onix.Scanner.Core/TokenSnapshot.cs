@@ -14,5 +14,6 @@ public struct TokenSnapshot
     public long JupiterTimestampUtc;
     public int JupiterLatencyMs;
     public Guid? ProxyId;
+    public long ProxyErrorUntilUtc;
     public long Sequence;
 }

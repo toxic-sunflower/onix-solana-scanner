@@ -23,6 +23,7 @@ public interface IUserRepository
     Task DeleteOtherSessionsAsync(Guid userId, Guid keepTokenId, CancellationToken ct = default);
     Task UpdateRefreshTokenLastUsedAsync(Guid tokenId, string? ip, CancellationToken ct = default);
     Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default);
+    Task SetAlertStateAsync(Guid userId, Guid tokenId, DateTime? lastSignalAt, bool isArmed, CancellationToken ct = default);
     Task BlacklistJtiAsync(Guid userId, string jti, CancellationToken ct = default);
     Task BlacklistJtisAsync(Guid userId, List<string> jtis, CancellationToken ct = default);
     Task<bool> IsJtiBlacklistedAsync(string jti, CancellationToken ct = default);

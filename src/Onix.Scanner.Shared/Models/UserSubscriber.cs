@@ -6,4 +6,6 @@ public class UserSubscriber
     public long ChatId { get; set; }
     public decimal AlertThresholdPct { get; set; }
     public int CooldownSeconds { get; set; }
+    public DateTime? LastSignalAt { get; set; }
+    public bool IsArmed { get; set; }
 }

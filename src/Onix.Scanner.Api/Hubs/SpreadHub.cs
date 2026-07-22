@@ -37,7 +37,7 @@ public class SpreadHub : Hub
 
             var bingxPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0;
             var jupiterPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0;
-            var spread = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
+            var spread = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
             var lastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                 ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
                 : (DateTime?)null;
@@ -61,14 +61,5 @@ public class SpreadHub : Hub
         }
 
         await base.OnConnectedAsync();
-    }
-
-    private static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
-    {
-        if (bingxRaw == 0 || jupiterRaw == 0) return 0;
-        var bingx = (decimal)bingxRaw / 1e18m;
-        var jupiter = (decimal)jupiterRaw / 1e18m;
-        if (jupiter == 0) return 0;
-        return (bingx - jupiter) / jupiter * 100;
     }
 }

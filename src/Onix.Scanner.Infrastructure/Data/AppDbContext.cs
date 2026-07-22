@@ -34,6 +34,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.SolanaMint).HasMaxLength(64).IsRequired();
             e.Property(x => x.BingxSymbol).HasMaxLength(50).IsRequired();
             e.Property(x => x.JupiterInputMint).HasMaxLength(64).IsRequired();
+            e.Property(x => x.JupiterInputDecimals).HasDefaultValue(6);
             e.Property(x => x.BingxUrl).IsRequired();
             e.Property(x => x.JupiterUrl).IsRequired();
             e.Property(x => x.SolscanUrl).IsRequired();
@@ -114,6 +115,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
             e.Property(x => x.AlertThresholdPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
             e.Property(x => x.IsPinned).HasDefaultValue(false);
+            e.Property(x => x.IsArmed).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<SpreadTick>(e =>

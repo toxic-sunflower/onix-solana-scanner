@@ -45,7 +45,7 @@ public class UserTokensController : ControllerBase
                     SolscanUrl = t.SolscanUrl,
                     BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
                     JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
-                    SpreadPct = CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
+                    SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
                     LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                         ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc) : null,
                 };
@@ -92,15 +92,6 @@ public class UserTokensController : ControllerBase
         var userId = User.GetUserId();
         await _tokenRepo.PinTokenAsync(userId, tokenId, request.IsPinned, ct);
         return NoContent();
-    }
-
-    private static decimal CalculateSpread(long bingxRaw, long jupiterRaw)
-    {
-        if (bingxRaw == 0 || jupiterRaw == 0) return 0;
-        var bingx = (decimal)bingxRaw / 1e18m;
-        var jupiter = (decimal)jupiterRaw / 1e18m;
-        if (jupiter == 0) return 0;
-        return (bingx - jupiter) / jupiter * 100;
     }
 
     public record AddTokenRequest(Guid TokenId);

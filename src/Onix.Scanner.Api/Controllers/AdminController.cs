@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
+using Onix.Scanner.Api.Services;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Models;
 
@@ -59,6 +60,7 @@ public class AdminController : ControllerBase
                 case "solanamint": existing.SolanaMint = prop.Value.GetString()!; break;
                 case "bingxsymbol": existing.BingxSymbol = prop.Value.GetString()!; break;
                 case "jupiterinputmint": existing.JupiterInputMint = prop.Value.GetString()!; break;
+                case "jupiterinputdecimals": existing.JupiterInputDecimals = prop.Value.GetInt32(); break;
                 case "quoteamount":
                     await _tokenRepo.SetQuoteAmountAsync(id, prop.Value.GetDecimal(), ct);
                     break;
@@ -96,12 +98,14 @@ public class AdminController : ControllerBase
     {
         var proxy = await _proxyRepo.GetByIdAsync(id, ct);
         if (proxy is null) return NotFound();
-        return Ok(new { status = "test_not_implemented" });
-    }
 
-    [HttpGet("health")]
-    public ActionResult Health()
-    {
-        return Ok(new { status = "ok", timestamp = DateTime.UtcNow });
+        var result = await ProxyTester.TestAsync(proxy, ct);
+
+        proxy.Status = result.Success ? Onix.Scanner.Shared.ProxyStatus.Active : Onix.Scanner.Shared.ProxyStatus.Failed;
+        proxy.LatencyMs = result.LatencyMs;
+        proxy.LastCheckAt = DateTime.UtcNow;
+        await _proxyRepo.UpdateAsync(proxy, ct);
+
+        return Ok(new { status = proxy.Status.ToString(), latencyMs = result.LatencyMs, error = result.Error });
     }
 }

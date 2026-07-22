@@ -20,6 +20,7 @@ public interface ITokenRepository
     Task AddDefaultTokensAsync(Guid userId, CancellationToken ct = default);
     Task SetQuoteAmountAsync(Guid tokenId, decimal amount, CancellationToken ct = default);
     Task<decimal?> GetQuoteAmountAsync(Guid tokenId, CancellationToken ct = default);
+    Task<Dictionary<Guid, decimal>> GetAllQuoteAmountsAsync(CancellationToken ct = default);
     Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default);
     Task<HashSet<Guid>> GetPinnedTokenIdsAsync(Guid userId, CancellationToken ct = default);
 }

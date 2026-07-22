@@ -33,7 +33,6 @@ public class TokenRepositoryTests : IClassFixture<PostgreSqlFixture>, IDisposabl
             BingxSymbol = "TEST-USDT",
             JupiterInputMint = "So11111111111111111111111111111111111111112",
             Decimals = 9,
-            QuoteAmount = 0.01m,
             BingxUrl = "https://bingx.com/TEST-USDT",
             JupiterUrl = "https://jup.ag/TEST",
             SolscanUrl = "https://solscan.io/token/TEST",
