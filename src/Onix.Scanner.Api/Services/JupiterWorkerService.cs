@@ -35,6 +35,21 @@ public sealed class JupiterWorkerService : BackgroundService
     };
 
     private readonly ConcurrentDictionary<string, GroupLimiter> _groupLimiters = new();
+    private readonly ConcurrentDictionary<Guid, DateTime> _lastErrorLogAt = new();
+    private static readonly TimeSpan ErrorLogThrottle = TimeSpan.FromSeconds(60);
+
+    /// <summary>Logs failures at Warning (visible at default log level) but at
+    /// most once per token per minute — this runs per-token every ~1s, so
+    /// logging every occurrence would flood the log instead of explaining
+    /// anything.</summary>
+    private void LogFailureThrottled(Token token, string message, Exception? ex = null)
+    {
+        var now = DateTime.UtcNow;
+        var last = _lastErrorLogAt.GetOrAdd(token.Id, DateTime.MinValue);
+        if (now - last < ErrorLogThrottle) return;
+        _lastErrorLogAt[token.Id] = now;
+        _logger.LogWarning(ex, "Jupiter quote issue for {Symbol}: {Message}", token.Symbol, message);
+    }
 
     private sealed class GroupLimiter
     {
@@ -109,7 +124,7 @@ public sealed class JupiterWorkerService : BackgroundService
             var amountRaw = (long)Math.Round(quoteAmount * (decimal)Math.Pow(10, token.JupiterInputDecimals));
             if (amountRaw <= 0)
             {
-                _logger.LogTrace("Jupiter: skipping {Symbol}, non-positive amount", token.Symbol);
+                LogFailureThrottled(token, $"non-positive amount computed (quoteAmount={quoteAmount}, decimals={token.JupiterInputDecimals})");
                 return;
             }
 
@@ -127,21 +142,29 @@ public sealed class JupiterWorkerService : BackgroundService
                     return;
                 }
 
-                response.EnsureSuccessStatusCode();
                 var latencyMs = (int)sw.ElapsedMilliseconds;
-
                 var json = await response.Content.ReadAsStringAsync(ct);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    LogFailureThrottled(token, $"HTTP {(int)response.StatusCode} from {url} — body: {Truncate(json)}");
+                    return;
+                }
+
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 
                 if (!root.TryGetProperty("inAmount", out var inEl) || !root.TryGetProperty("outAmount", out var outEl))
                 {
-                    _logger.LogTrace("Jupiter: no route for {Symbol}", token.Symbol);
+                    LogFailureThrottled(token, $"response missing inAmount/outAmount — body: {Truncate(json)}");
                     return;
                 }
 
                 if (!long.TryParse(inEl.GetString(), out var inAtomic) || !long.TryParse(outEl.GetString(), out var outAtomic))
+                {
+                    LogFailureThrottled(token, $"inAmount/outAmount not parseable as long — body: {Truncate(json)}");
                     return;
+                }
                 if (inAtomic <= 0 || outAtomic <= 0) return;
 
                 var inAmount = inAtomic / (decimal)Math.Pow(10, token.JupiterInputDecimals);
@@ -179,13 +202,15 @@ public sealed class JupiterWorkerService : BackgroundService
                 ref var snap = ref _snapshotPool.GetSnapshot(idx);
                 snap.ProxyErrorUntilUtc = DateTime.UtcNow.Add(ProxyErrorTtl).Ticks;
             }
-            _logger.LogDebug(ex, "Jupiter quote failed for {Symbol}", token.Symbol);
+            LogFailureThrottled(token, $"{ex.GetType().Name}: {ex.Message}", ex);
         }
         finally
         {
             limiter.Concurrency.Release();
         }
     }
+
+    private static string Truncate(string s) => s.Length > 300 ? s[..300] + "…" : s;
 
     private static HttpClient CreateProxyClient(Proxy proxy)
     {
