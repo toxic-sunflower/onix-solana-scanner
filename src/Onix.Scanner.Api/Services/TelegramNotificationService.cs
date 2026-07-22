@@ -15,8 +15,14 @@ public sealed class TelegramNotificationService : BackgroundService
     private readonly ITelegramBotClient? _bot;
     private readonly IServiceProvider _services;
     private readonly string _appUrl;
+    private readonly string? _webhookSecret;
     private readonly JwtTokenService _jwt;
     private readonly LocalizationService _loc;
+
+    /// <summary>Compared against the X-Telegram-Bot-Api-Secret-Token header on
+    /// incoming webhook requests, so only Telegram (which we told the secret
+    /// via SetWebhookAsync) can feed us updates.</summary>
+    public string? WebhookSecret => _webhookSecret;
 
     private readonly ConcurrentDictionary<long, BotState> _states = new();
     private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
@@ -38,6 +44,7 @@ public sealed class TelegramNotificationService : BackgroundService
             _appUrl = "https://" + _appUrl;
         _jwt = jwt;
         _loc = loc;
+        _webhookSecret = config["Telegram:WebhookSecret"];
 
         var token = config["Telegram:BotToken"];
 
@@ -65,43 +72,45 @@ public sealed class TelegramNotificationService : BackgroundService
 
         if (_bot is not null)
         {
-            try
+            // Webhooks instead of long-polling: with blue/green deploys, two
+            // instances briefly run side by side, and Telegram only allows
+            // ONE getUpdates poller per bot token — the loser gets 409
+            // Conflict, which used to take the whole process down. Setting
+            // the webhook is idempotent: both instances pointing it at the
+            // same URL during the overlap window is harmless, unlike polling.
+            if (string.IsNullOrEmpty(_webhookSecret))
             {
-                _logger.LogInformation("Starting bot polling via StartReceiving");
-                _bot.StartReceiving(
-                    updateHandler: HandleUpdateAsync,
-                    errorHandler: OnPollingError,
-                    receiverOptions: new Telegram.Bot.Polling.ReceiverOptions
-                    {
-                        AllowedUpdates = [UpdateType.Message, UpdateType.CallbackQuery],
-                    },
-                    cancellationToken: stoppingToken);
-                _logger.LogInformation("Bot polling started");
-
-                await Task.Delay(Timeout.Infinite, stoppingToken);
+                _logger.LogError("Telegram:WebhookSecret is not configured — webhook not registered, bot updates disabled");
             }
-            catch (OperationCanceledException)
+            else
             {
-                _logger.LogInformation("Bot polling stopped (shutdown)");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Bot polling failed");
+                try
+                {
+                    var webhookUrl = $"{_appUrl}/api/v1/telegram/webhook";
+                    await _bot.SetWebhook(
+                        url: webhookUrl,
+                        secretToken: _webhookSecret,
+                        allowedUpdates: [UpdateType.Message, UpdateType.CallbackQuery],
+                        cancellationToken: stoppingToken);
+                    _logger.LogInformation("Telegram webhook registered at {Url}", webhookUrl);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to register Telegram webhook");
+                }
             }
         }
 
-        _logger.LogInformation("TelegramNotificationService stopping, awaiting alert task");
+        _logger.LogInformation("TelegramNotificationService alert loop running");
         await alertTask;
     }
 
-    private Task OnPollingError(ITelegramBotClient bot, Exception exception, CancellationToken ct)
+    /// <summary>Entry point for TelegramWebhookController — processes one
+    /// Update delivered by Telegram over HTTP.</summary>
+    public async Task HandleWebhookUpdateAsync(Update update, CancellationToken ct)
     {
-        _logger.LogError(exception, "Telegram polling error");
-        return Task.CompletedTask;
-    }
+        if (_bot is null) return;
 
-    private async Task HandleUpdateAsync(ITelegramBotClient bot, Update update, CancellationToken ct)
-    {
         try
         {
             if (update.CallbackQuery is not null)

@@ -37,6 +37,8 @@ if (File.Exists(envPath))
         Environment.SetEnvironmentVariable("Telegram__OpenId__ClientSecret", tcs);
     if (envs.TryGetValue("TELEGRAM_OAUTH_REDIRECT_URI", out var truri))
         Environment.SetEnvironmentVariable("Telegram__OpenId__RedirectUri", truri);
+    if (envs.TryGetValue("TELEGRAM_WEBHOOK_SECRET", out var twhs))
+        Environment.SetEnvironmentVariable("Telegram__WebhookSecret", twhs);
     if (envs.TryGetValue("ENCRYPTION_KEY", out var ek))
         Environment.SetEnvironmentVariable("Encryption__Key", ek);
     if (envs.TryGetValue("APP_URL", out var au))
