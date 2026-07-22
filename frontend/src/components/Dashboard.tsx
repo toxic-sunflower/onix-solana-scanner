@@ -60,12 +60,19 @@ export default function Dashboard({ onNavigate }: Props) {
   void now;
 
   const loadAll = useCallback(async () => {
+    const authRes = await authFetch('/api/v1/auth/check');
+    if (!authRes.ok) return;
     const res = await authFetch('/api/v1/tokens?cexOnly=true&take=200');
     if (res.ok) {
       const data = await res.json();
       setAllTokens(data.items ?? data);
+      connectToHub();
     }
   }, []);
+
+  const connectToHub = () => {
+    startConnection().then(() => setConnected(true));
+  };
 
   const loadTicks = useCallback((tokenId: string) => {
     authFetch(`/api/v1/tokens/${tokenId}/ticks?limit=100`)
@@ -106,8 +113,6 @@ export default function Dashboard({ onNavigate }: Props) {
         return next;
       });
     });
-
-    startConnection().then(() => setConnected(true));
 
     connection.onclose(() => setConnected(false));
     connection.onreconnecting(() => setConnected(false));
