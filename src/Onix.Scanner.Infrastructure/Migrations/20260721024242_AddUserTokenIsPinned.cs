@@ -10,12 +10,12 @@ namespace Onix.Scanner.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<bool>(
-                name: "IsPinned",
-                table: "user_tokens",
-                type: "boolean",
-                nullable: false,
-                defaultValue: false);
+            // IF NOT EXISTS: on at least one environment this column was already
+            // present without this migration being recorded as applied, which
+            // made every migration after it (and this one) fail forever. This
+            // makes it safe to run whether or not the column is already there.
+            migrationBuilder.Sql(
+                "ALTER TABLE user_tokens ADD COLUMN IF NOT EXISTS \"IsPinned\" boolean NOT NULL DEFAULT FALSE;");
         }
 
         /// <inheritdoc />
