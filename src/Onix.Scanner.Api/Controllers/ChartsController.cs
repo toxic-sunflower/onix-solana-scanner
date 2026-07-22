@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Dtos;
@@ -5,6 +6,7 @@ using Onix.Scanner.Shared.Dtos;
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/tokens/{tokenId:guid}")]
 public class ChartsController : ControllerBase
 {

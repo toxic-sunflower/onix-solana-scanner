@@ -8,6 +8,7 @@ using Onix.Scanner.Shared.Models;
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
@@ -34,6 +35,7 @@ public class AuthController : ControllerBase
     private string? IpAddress =>
         HttpContext.Connection.RemoteIpAddress?.ToString();
 
+    [AllowAnonymous]
     [HttpGet("telegram")]
     public ActionResult LoginViaTelegram([FromQuery] long telegramId, [FromQuery] string? username, [FromQuery] string? name)
     {
@@ -41,6 +43,7 @@ public class AuthController : ControllerBase
         return Ok(new { url = botLink });
     }
 
+    [AllowAnonymous]
     [HttpPost("verify")]
     public async Task<ActionResult> VerifyTelegram([FromBody] VerifyRequest request, CancellationToken ct)
     {
@@ -95,6 +98,7 @@ public class AuthController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult> Refresh([FromBody] RefreshRequest request, CancellationToken ct)
     {
@@ -266,6 +270,7 @@ public class AuthController : ControllerBase
         });
     }
 
+    [AllowAnonymous]
     [HttpGet("/login/{token}")]
     public async Task<ActionResult> LoginViaMagicLink(string token, CancellationToken ct)
     {
