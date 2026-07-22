@@ -157,6 +157,10 @@ public sealed class TelegramNotificationService : BackgroundService
                         await SendSignalAsync(sub.ChatId, dto, stoppingToken);
                     }
                 }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    // Shutting down (e.g. container stop) — not a real failure.
+                }
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Failed to send Telegram signal for {Symbol}", dto.Symbol);
