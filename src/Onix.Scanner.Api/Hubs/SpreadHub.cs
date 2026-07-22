@@ -1,5 +1,4 @@
 using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
@@ -8,7 +7,6 @@ using Onix.Scanner.Shared.Dtos;
 
 namespace Onix.Scanner.Api.Hubs;
 
-[Authorize]
 public class SpreadHub : Hub
 {
     private readonly ITokenSnapshotPool _snapshotPool;
