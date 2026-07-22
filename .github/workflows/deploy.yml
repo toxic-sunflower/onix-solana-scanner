@@ -42,6 +42,24 @@ jobs:
 
             docker compose up -d --build
             docker image prune -f
+
+            echo "Waiting for app container to become healthy..."
+            for i in $(seq 1 30); do
+              status=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q app) 2>/dev/null || echo "starting")
+              if [ "$status" = "healthy" ]; then
+                echo "App is healthy."
+                exit 0
+              fi
+              if [ "$status" = "unhealthy" ]; then
+                echo "App reported unhealthy. Recent logs:"
+                docker compose logs --tail=100 app
+                exit 1
+              fi
+              sleep 5
+            done
+            echo "Timed out waiting for app to become healthy. Recent logs:"
+            docker compose logs --tail=100 app
+            exit 1
         env:
           REPO_URL: https://github.com/${{ github.repository }}.git
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}

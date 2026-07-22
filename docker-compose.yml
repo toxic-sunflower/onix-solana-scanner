@@ -10,6 +10,9 @@ services:
       - ASPNETCORE_URLS=http://0.0.0.0:5000
       - Telegram__BotToken=${TELEGRAM_BOT_TOKEN}
       - Telegram__BotUsername=${TELEGRAM_BOT_USERNAME}
+      - Telegram__OpenId__ClientId=${TELEGRAM_OAUTH_CLIENT_ID}
+      - Telegram__OpenId__ClientSecret=${TELEGRAM_OAUTH_CLIENT_SECRET}
+      - Telegram__OpenId__RedirectUri=${TELEGRAM_OAUTH_REDIRECT_URI}
       - Encryption__Key=${ENCRYPTION_KEY}
       - ConnectionStrings__Default=Host=localhost;Database=onix_scanner;Username=onix;Password=${DB_PASSWORD}
       - App__Url=${APP_URL}
