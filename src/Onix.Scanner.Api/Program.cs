@@ -158,6 +158,25 @@ if (app.Environment.IsDevelopment())
 
 app.UseRateLimiter();
 app.UseAuthentication();
+
+// LOCAL-NO-AUTH BRANCH ONLY — never merge this into main. Overrides whatever
+// UseAuthentication() produced with a fixed logged-in admin user, so the
+// dashboard/admin panel work locally without going through the real
+// Telegram OAuth flow. Placed after UseAuthentication (and before
+// UseAuthorization) so it wins no matter what a real/missing token did.
+app.Use(async (context, next) =>
+{
+    var identity = new System.Security.Claims.ClaimsIdentity(
+    [
+        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, "00000000-0000-0000-0000-000000000001"),
+        new System.Security.Claims.Claim("telegram_id", "1"),
+        new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, "Admin"),
+        new System.Security.Claims.Claim("tier", "Premium"),
+    ], authenticationType: "DevBypass");
+    context.User = new System.Security.Claims.ClaimsPrincipal(identity);
+    await next();
+});
+
 app.UseAuthorization();
 
 app.UseDefaultFiles();
