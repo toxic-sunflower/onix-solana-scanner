@@ -18,6 +18,7 @@ public class AuthController : ControllerBase
     private readonly JwtTokenService _jwt;
     private readonly TelegramOpenIdValidator _openIdValidator;
     private readonly TelegramOAuthClient _oauthClient;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         IUserRepository userRepo,
@@ -25,13 +26,15 @@ public class AuthController : ControllerBase
         IConfiguration config,
         JwtTokenService jwt,
         TelegramOpenIdValidator openIdValidator,
-        TelegramOAuthClient oauthClient)
+        TelegramOAuthClient oauthClient,
+        ILogger<AuthController> logger)
     {
         _userRepo = userRepo;
         _tokenRepo = tokenRepo;
         _jwt = jwt;
         _openIdValidator = openIdValidator;
         _oauthClient = oauthClient;
+        _logger = logger;
         _appUrl = (config.GetValue<string>("App:Url") ?? "http://localhost:5000").Trim();
         if (!_appUrl.StartsWith("http://") && !_appUrl.StartsWith("https://"))
             _appUrl = "https://" + _appUrl;
@@ -61,11 +64,29 @@ public class AuthController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.Code) || string.IsNullOrWhiteSpace(request.CodeVerifier))
             return BadRequest(new { error = "code_and_verifier_required" });
 
-        var idToken = await _oauthClient.ExchangeCodeForIdTokenAsync(request.Code, request.CodeVerifier, ct);
+        string? idToken;
+        try
+        {
+            idToken = await _oauthClient.ExchangeCodeForIdTokenAsync(request.Code, request.CodeVerifier, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Telegram OAuth code exchange threw");
+            return StatusCode(500, new { error = "code_exchange_error" });
+        }
         if (idToken is null)
             return Unauthorized(new { error = "code_exchange_failed" });
 
-        var principal = await _openIdValidator.ValidateAsync(idToken, ct);
+        ClaimsPrincipal? principal;
+        try
+        {
+            principal = await _openIdValidator.ValidateAsync(idToken, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Telegram id_token validation threw");
+            return StatusCode(500, new { error = "id_token_validation_error" });
+        }
         if (principal is null)
             return Unauthorized(new { error = "invalid_id_token" });
 
@@ -76,45 +97,53 @@ public class AuthController : ControllerBase
         var username = principal.FindFirstValue("preferred_username");
         var displayName = principal.FindFirstValue("given_name") ?? principal.FindFirstValue("name") ?? username;
 
-        var user = await _userRepo.GetByTelegramIdAsync(telegramId.Value, ct);
-        if (user is null)
+        try
         {
-            user = new User
+            var user = await _userRepo.GetByTelegramIdAsync(telegramId.Value, ct);
+            if (user is null)
             {
-                TelegramId = telegramId.Value,
-                TelegramUsername = username,
-                DisplayName = displayName,
-                LastLoginAt = DateTime.UtcNow
-            };
-            user = await _userRepo.CreateAsync(user, ct);
-            await _tokenRepo.AddDefaultTokensAsync(user.Id, ct);
+                user = new User
+                {
+                    TelegramId = telegramId.Value,
+                    TelegramUsername = username,
+                    DisplayName = displayName,
+                    LastLoginAt = DateTime.UtcNow
+                };
+                user = await _userRepo.CreateAsync(user, ct);
+                await _tokenRepo.AddDefaultTokensAsync(user.Id, ct);
+            }
+            else
+            {
+                user.LastLoginAt = DateTime.UtcNow;
+                await _userRepo.UpdateAsync(user, ct);
+            }
+
+            var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+            var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+
+            await _userRepo.SaveRefreshTokenAsync(new RefreshToken
+            {
+                UserId = user.Id,
+                TokenHash = hash,
+                DeviceName = DeviceName,
+                IpAddress = IpAddress,
+                LastJti = jti,
+                ExpiresAt = DateTime.UtcNow.AddDays(30),
+            }, ct);
+
+            return Ok(new
+            {
+                token = accessToken,
+                refreshToken,
+                userId = user.Id,
+                expiresAt = DateTime.UtcNow.AddDays(30)
+            });
         }
-        else
+        catch (Exception ex)
         {
-            user.LastLoginAt = DateTime.UtcNow;
-            await _userRepo.UpdateAsync(user, ct);
+            _logger.LogError(ex, "Failed to create/update user or issue tokens after OpenID login");
+            return StatusCode(500, new { error = "login_finalize_error" });
         }
-
-        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
-        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
-
-        await _userRepo.SaveRefreshTokenAsync(new RefreshToken
-        {
-            UserId = user.Id,
-            TokenHash = hash,
-            DeviceName = DeviceName,
-            IpAddress = IpAddress,
-            LastJti = jti,
-            ExpiresAt = DateTime.UtcNow.AddDays(30),
-        }, ct);
-
-        return Ok(new
-        {
-            token = accessToken,
-            refreshToken,
-            userId = user.Id,
-            expiresAt = DateTime.UtcNow.AddDays(30)
-        });
     }
 
     [Authorize]
@@ -141,6 +170,9 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = "invalid_refresh_token" });
 
         await _userRepo.DeleteRefreshTokenAsync(stored.Id, ct);
+
+        if (stored.ExpiresAt < DateTime.UtcNow)
+            return Unauthorized(new { error = "refresh_token_expired" });
 
         var user = await _userRepo.GetByIdAsync(stored.UserId, ct);
         if (user is null)
