@@ -11,6 +11,12 @@ COPY --from=frontend /build/src/Onix.Scanner.Api/wwwroot ./src/Onix.Scanner.Api/
 RUN dotnet publish src/Onix.Scanner.Api/Onix.Scanner.Api.csproj -c Release -o /publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+# curl is used by the container HEALTHCHECK (docker-compose.yml) — the base
+# image doesn't ship it, so every healthcheck probe was failing with
+# "curl: not found", marking the container unhealthy regardless of whether
+# the app itself was fine.
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /publish .
 EXPOSE 8080
