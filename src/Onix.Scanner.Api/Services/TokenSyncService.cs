@@ -15,6 +15,10 @@ public sealed class TokenSyncService : BackgroundService
     private static readonly HashSet<string> Stablecoins =
         new(StringComparer.OrdinalIgnoreCase) { "USDC", "USDT", "DAI", "FDUSD", "PYUSD", "USDE", "BUSD", "TUSD", "LUSD" };
 
+    // Base asset quotes are priced against, so BingX/Jupiter spreads land in USD.
+    private const string UsdcMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+    private const int UsdcDecimals = 6;
+
     public TokenSyncService(
         ILogger<TokenSyncService> logger,
         IServiceScopeFactory scopeFactory,
@@ -77,7 +81,8 @@ public sealed class TokenSyncService : BackgroundService
                 SolanaMint = jt.Mint,
                 Decimals = jt.Decimals,
                 BingxSymbol = bingxSymbol,
-                JupiterInputMint = jt.Mint,
+                JupiterInputMint = UsdcMint,
+                JupiterInputDecimals = UsdcDecimals,
                 BingxUrl = cex ? $"https://www.bingx.com/en-us/futures/{bingxSymbol}" : "",
                 JupiterUrl = $"https://jup.ag/swap/{jt.Symbol}-USDC",
                 SolscanUrl = $"https://solscan.io/token/{jt.Mint}",

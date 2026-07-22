@@ -34,7 +34,7 @@ public class AppDbContext : DbContext
             e.Property(x => x.SolanaMint).HasMaxLength(64).IsRequired();
             e.Property(x => x.BingxSymbol).HasMaxLength(50).IsRequired();
             e.Property(x => x.JupiterInputMint).HasMaxLength(64).IsRequired();
-            e.Property(x => x.JupiterInputDecimals).HasDefaultValue(9);
+            e.Property(x => x.JupiterInputDecimals).HasDefaultValue(6);
             e.Property(x => x.BingxUrl).IsRequired();
             e.Property(x => x.JupiterUrl).IsRequired();
             e.Property(x => x.SolscanUrl).IsRequired();
