@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core;
@@ -8,6 +9,7 @@ using Onix.Scanner.Shared.Models;
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/v1/tokens")]
 public class TokensController : ControllerBase
 {
