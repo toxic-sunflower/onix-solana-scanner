@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { UserTokenDto, TickPoint } from '../types';
 
 interface Props {
@@ -9,17 +9,6 @@ interface Props {
   onClickHistory: (id: string) => void;
   isPinned?: boolean;
   onPin?: (tokenId: string, isPinned: boolean) => void;
-}
-
-function ago(utcStr?: string): string {
-  if (!utcStr) return '';
-  const ms = Date.now() - new Date(utcStr).getTime();
-  if (ms < 0) return 'now';
-  const sec = Math.floor(ms / 1000);
-  if (sec < 60) return `${sec}s`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min}m`;
-  return `${Math.floor(min / 60)}h`;
 }
 
 export default function TokenCard({ token, flash, ticks, onClickChart, onClickHistory, isPinned, onPin }: Props) {

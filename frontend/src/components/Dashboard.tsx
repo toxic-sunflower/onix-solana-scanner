@@ -146,7 +146,7 @@ export default function Dashboard({ onNavigate }: Props) {
         <div className="flex items-center gap-3">
           <div className={`w-2.5 h-2.5 rounded-full ${connected ? 'bg-[#22c55e]' : 'bg-[#f59e0b] shimmer'}`} />
           <h2 className="text-lg font-bold text-[#f1f5f9]">Dashboard</h2>
-          <span className="text-xs text-[#475569] tabular-nums">{ago(latestUpdate)}</span>
+          <span className="text-xs text-[#475569] tabular-nums">{ago(latestUpdate ?? undefined)}</span>
         </div>
         <div className="flex gap-2">
           <button onClick={() => onNavigate('settings')}
