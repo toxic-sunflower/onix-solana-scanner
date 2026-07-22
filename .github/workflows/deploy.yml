@@ -81,15 +81,8 @@ jobs:
             fi
 
             echo "app_$NEW is healthy. Switching nginx upstream to port $NEW_PORT..."
-            NGINX_CONF=$(grep -rl "onix_backend" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1)
-            if [ -z "$NGINX_CONF" ]; then
-              echo "Could not find an nginx config referencing 'onix_backend'. NOT switching traffic — app_$NEW is running on $NEW_PORT but nginx still points at the old color. Fix nginx config discovery and re-run."
-              exit 1
-            fi
-
-            sudo -n sed -i -E "s/server 127\.0\.0\.1:[0-9]+;/server 127.0.0.1:$NEW_PORT;/" "$NGINX_CONF"
-            sudo -n nginx -t
-            sudo -n nginx -s reload
+            echo "$NEW_PORT" > /home/app/onix/.new_port
+            sudo -n /usr/local/bin/onix-switch-nginx.sh
 
             echo "$NEW" > "$ACTIVE_FILE"
             echo "Switched. Active color is now $NEW (port $NEW_PORT)."
