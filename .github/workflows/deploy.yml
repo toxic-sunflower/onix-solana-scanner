@@ -74,7 +74,10 @@ jobs:
             done
 
             if [ "$healthy" != "true" ]; then
-              echo "New color ($NEW) never became healthy. Logs:"
+              echo "New color ($NEW) never became healthy."
+              echo "--- docker inspect health (shows each healthcheck probe's own output/exit code) ---"
+              docker inspect --format='{{json .State.Health}}' "onix_app_$NEW" | python3 -m json.tool 2>/dev/null || docker inspect --format='{{json .State.Health}}' "onix_app_$NEW"
+              echo "--- container logs (last 150 lines) ---"
               docker compose logs --tail=150 "app_$NEW"
               echo "Traffic stays on ${CURRENT:-nothing}. Stopping the failed $NEW container."
               docker compose stop "app_$NEW"
