@@ -14,7 +14,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy via SSH
+      - name: Deploy via SSH (blue/green)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -40,26 +40,72 @@ jobs:
             TELEGRAM_OAUTH_REDIRECT_URI=$TELEGRAM_OAUTH_REDIRECT_URI
             EOF
 
-            docker compose up -d --build
+            ACTIVE_FILE=/home/app/onix/.active_color
+            CURRENT=$(cat "$ACTIVE_FILE" 2>/dev/null || echo "")
+            LEGACY_RUNNING=$(docker ps -q -f name=^onix-app-1$)
+
+            if [ -z "$CURRENT" ] && [ -n "$LEGACY_RUNNING" ]; then
+              # One-time cutover from the old single-container "app" setup: it's
+              # still squatting on port 5000, so bootstrap on green/5001 instead
+              # of colliding with it. The legacy container is torn down below,
+              # only after green is confirmed healthy and nginx has switched to it.
+              NEW=green; NEW_PORT=5001; OLD=""
+            elif [ "$CURRENT" = "blue" ]; then
+              NEW=green; NEW_PORT=5001; OLD=blue
+            else
+              NEW=blue; NEW_PORT=5000; OLD=green
+              if [ -z "$CURRENT" ]; then OLD=""; fi
+            fi
+
+            echo "Current active color: ${CURRENT:-none}. Legacy container running: ${LEGACY_RUNNING:-no}. Deploying $NEW on port $NEW_PORT."
+
+            docker compose build "app_$NEW"
+            docker compose up -d "app_$NEW"
             docker image prune -f
 
-            echo "Waiting for app container to become healthy..."
+            echo "Waiting for app_$NEW to become healthy..."
+            healthy=false
             for i in $(seq 1 30); do
-              status=$(docker inspect --format='{{.State.Health.Status}}' $(docker compose ps -q app) 2>/dev/null || echo "starting")
-              if [ "$status" = "healthy" ]; then
-                echo "App is healthy."
-                exit 0
-              fi
-              if [ "$status" = "unhealthy" ]; then
-                echo "App reported unhealthy. Recent logs:"
-                docker compose logs --tail=100 app
-                exit 1
-              fi
+              status=$(docker inspect --format='{{.State.Health.Status}}' "onix_app_$NEW" 2>/dev/null || echo "starting")
+              if [ "$status" = "healthy" ]; then healthy=true; break; fi
+              if [ "$status" = "unhealthy" ]; then break; fi
               sleep 5
             done
-            echo "Timed out waiting for app to become healthy. Recent logs:"
-            docker compose logs --tail=100 app
-            exit 1
+
+            if [ "$healthy" != "true" ]; then
+              echo "New color ($NEW) never became healthy. Logs:"
+              docker compose logs --tail=150 "app_$NEW"
+              echo "Traffic stays on ${CURRENT:-nothing}. Stopping the failed $NEW container."
+              docker compose stop "app_$NEW"
+              exit 1
+            fi
+
+            echo "app_$NEW is healthy. Switching nginx upstream to port $NEW_PORT..."
+            NGINX_CONF=$(grep -rl "onix_backend" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>/dev/null | head -1)
+            if [ -z "$NGINX_CONF" ]; then
+              echo "Could not find an nginx config referencing 'onix_backend'. NOT switching traffic — app_$NEW is running on $NEW_PORT but nginx still points at the old color. Fix nginx config discovery and re-run."
+              exit 1
+            fi
+
+            sudo -n sed -i -E "s/server 127\.0\.0\.1:[0-9]+;/server 127.0.0.1:$NEW_PORT;/" "$NGINX_CONF"
+            sudo -n nginx -t
+            sudo -n nginx -s reload
+
+            echo "$NEW" > "$ACTIVE_FILE"
+            echo "Switched. Active color is now $NEW (port $NEW_PORT)."
+
+            if [ -n "$OLD" ]; then
+              echo "Stopping old color ($OLD)..."
+              docker compose stop "app_$OLD"
+            fi
+
+            if [ -n "$LEGACY_RUNNING" ]; then
+              echo "Retiring legacy single-container deployment (onix-app-1)..."
+              docker stop onix-app-1 2>/dev/null || true
+              docker rm onix-app-1 2>/dev/null || true
+            fi
+
+            echo "Deploy complete."
         env:
           REPO_URL: https://github.com/${{ github.repository }}.git
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
