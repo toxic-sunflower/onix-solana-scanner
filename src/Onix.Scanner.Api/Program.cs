@@ -163,8 +163,6 @@ app.UseAuthorization();
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-app.MapGet("/api/v1/health", () => Results.Ok(new { status = "ok", timestamp = DateTime.UtcNow }))
-    .RequireRateLimiting("public");
 app.MapControllers();
 app.MapHub<SpreadHub>("/hubs/spread").RequireAuthorization();
 
