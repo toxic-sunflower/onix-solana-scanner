@@ -7,39 +7,8 @@ import Settings from './components/Settings';
 import Landing from './components/Landing';
 import { logout } from './lib/auth';
 
-function getTelegramUser() {
-  const tg = (window as any).Telegram?.WebApp;
-  if (tg?.initDataUnsafe?.user) {
-    return tg.initDataUnsafe.user as { id: number; username?: string; first_name?: string };
-  }
-  return null;
-}
-
 function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
-  const token = localStorage.getItem('auth_token');
-
-  useEffect(() => {
-    const tgUser = getTelegramUser();
-    if (tgUser && !token) {
-      fetch('/api/v1/auth/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegramId: tgUser.id,
-          username: tgUser.username ?? '',
-          displayName: tgUser.first_name ?? '',
-        }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          localStorage.setItem('auth_token', data.token);
-          localStorage.setItem('refresh_token', data.refreshToken);
-          location.reload();
-        })
-        .catch(console.error);
-    }
-  }, [token]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

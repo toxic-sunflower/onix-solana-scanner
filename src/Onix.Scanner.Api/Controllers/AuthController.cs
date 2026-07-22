@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
@@ -15,6 +17,7 @@ public class AuthController : ControllerBase
     private readonly IUserRepository _userRepo;
     private readonly ITokenRepository _tokenRepo;
     private readonly string _botUsername;
+    private readonly string _botToken;
     private readonly string _appUrl;
     private readonly JwtTokenService _jwt;
 
@@ -24,6 +27,7 @@ public class AuthController : ControllerBase
         _tokenRepo = tokenRepo;
         _jwt = jwt;
         _botUsername = config.GetValue<string>("Telegram:BotUsername") ?? "YOUR_BOT";
+        _botToken = config.GetValue<string>("Telegram:BotToken") ?? throw new InvalidOperationException("Telegram:BotToken is required");
         _appUrl = (config.GetValue<string>("App:Url") ?? "http://localhost:5000").Trim();
         if (!_appUrl.StartsWith("http://") && !_appUrl.StartsWith("https://"))
             _appUrl = "https://" + _appUrl;
@@ -95,6 +99,53 @@ public class AuthController : ControllerBase
             telegramId = telegramIdClaim != null ? (long?)long.Parse(telegramIdClaim) : null,
             role = User.FindFirstValue(ClaimTypes.Role),
             tier = User.FindFirstValue("tier"),
+        });
+    }
+
+    [AllowAnonymous]
+    [HttpPost("tg-widget")]
+    public async Task<ActionResult> TelegramWidgetAuth([FromBody] TelegramWidgetRequest request, CancellationToken ct)
+    {
+        if (!VerifyTelegramHash(request, _botToken))
+            return Unauthorized(new { error = "invalid_hash" });
+
+        var authDate = DateTimeOffset.FromUnixTimeSeconds(request.AuthDate);
+        if (authDate < DateTimeOffset.UtcNow.AddHours(-24))
+            return Unauthorized(new { error = "auth_date_expired" });
+
+        var user = await _userRepo.GetByTelegramIdAsync(request.Id, ct);
+
+        if (user is null)
+        {
+            user = new User
+            {
+                TelegramId = request.Id,
+                TelegramUsername = request.Username,
+                DisplayName = request.FirstName ?? request.Username,
+                LastLoginAt = DateTime.UtcNow
+            };
+            user = await _userRepo.CreateAsync(user, ct);
+            await _tokenRepo.AddDefaultTokensAsync(user.Id, ct);
+        }
+
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, hash) = _jwt.GenerateRefreshToken();
+
+        await _userRepo.SaveRefreshTokenAsync(new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = hash,
+            DeviceName = DeviceName,
+            IpAddress = IpAddress,
+            LastJti = jti,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
+
+        return Ok(new
+        {
+            token = accessToken,
+            refreshToken,
+            userId = user.Id,
         });
     }
 
@@ -313,5 +364,46 @@ public class AuthController : ControllerBase
     public class RevokeRequest
     {
         public string RefreshToken { get; set; } = string.Empty;
+    }
+
+    public class TelegramWidgetRequest
+    {
+        public long Id { get; set; }
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? Username { get; set; }
+        public string? PhotoUrl { get; set; }
+        public long AuthDate { get; set; }
+        public string Hash { get; set; } = string.Empty;
+    }
+
+    private static bool VerifyTelegramHash(TelegramWidgetRequest request, string botToken)
+    {
+        var fields = new SortedDictionary<string, string>
+        {
+            ["auth_date"] = request.AuthDate.ToString(),
+            ["first_name"] = request.FirstName ?? "",
+            ["id"] = request.Id.ToString(),
+            ["last_name"] = request.LastName ?? "",
+            ["photo_url"] = request.PhotoUrl ?? "",
+            ["username"] = request.Username ?? "",
+        };
+
+        var dataCheckString = string.Join("\n", fields
+            .Where(f => !string.IsNullOrEmpty(f.Value))
+            .Select(f => $"{f.Key}={f.Value}"));
+
+        var secretKey = HMACSHA256(Encoding.UTF8.GetBytes(botToken), Encoding.UTF8.GetBytes("WebAppData"));
+        var expectedHash = HMACSHA256(secretKey, Encoding.UTF8.GetBytes(dataCheckString));
+
+        var expectedHex = Convert.ToHexString(expectedHash).ToLower();
+
+        return expectedHex == request.Hash;
+    }
+
+    private static byte[] HMACSHA256(byte[] key, byte[] data)
+    {
+        using var hmac = new HMACSHA256(key);
+        return hmac.ComputeHash(data);
     }
 }
