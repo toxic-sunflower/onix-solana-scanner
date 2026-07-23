@@ -144,6 +144,11 @@ export default function Dashboard({ onNavigate }: Props) {
     setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isFavorite } : t));
   };
 
+  const doBlacklist = async (id: string) => {
+    const res = await authFetch(`/api/v1/blacklist/${id}`, { method: 'POST' });
+    if (res.ok) setAllTokens(prev => prev.filter(t => t.id !== id));
+  };
+
   const filtered = useMemo(() => {
     let list = [...allTokens];
     if (search) {
@@ -189,6 +194,7 @@ export default function Dashboard({ onNavigate }: Props) {
             onPin={doPin}
             isFavorite={t.isFavorite}
             onFavorite={doFavorite}
+            onBlacklist={doBlacklist}
             onClickChart={(id) => onNavigate('chart', id)}
             onClickHistory={(id) => onNavigate('history', id)} />
         ))}

@@ -123,6 +123,42 @@ public sealed class TelegramNotificationService : BackgroundService
         }
     }
 
+    /// <summary>Called right after a user logs in via "Log In With Telegram"
+    /// OAuth, so the bot dialog starts immediately instead of waiting for the
+    /// user to find the bot and send /start manually. For private chats
+    /// Telegram's chat_id equals the user's numeric Telegram ID, so this only
+    /// works if the user has a chat with the bot open already (which the
+    /// OAuth authorization flow itself requires — it happens inside
+    /// Telegram, against this bot). Best-effort: if it fails (e.g. the user
+    /// somehow never opened the bot chat), the manual /start path still
+    /// works exactly as before.</summary>
+    public async Task<bool> TryStartDialogAsync(Guid userId, long telegramId, CancellationToken ct)
+    {
+        if (_bot is null) return false;
+
+        try
+        {
+            using var scope = _services.CreateScope();
+            var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+            await userRepo.UpdateChatIdAsync(userId, telegramId, ct);
+
+            var user = await userRepo.GetByIdAsync(userId, ct);
+            if (user?.Language is not null)
+                _loc.SetLanguage(telegramId, user.Language);
+
+            await SetMenuButtonAsync(telegramId, ct);
+            await ShowMainMenu(telegramId, ct);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogInformation(ex,
+                "Could not proactively start Telegram dialog for user {UserId} — they'll get it on their next /start instead",
+                userId);
+            return false;
+        }
+    }
+
     // ── Alert sending ──
 
     private async Task ProcessAlertsAsync(CancellationToken stoppingToken)

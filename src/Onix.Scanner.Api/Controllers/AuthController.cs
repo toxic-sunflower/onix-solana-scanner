@@ -18,6 +18,7 @@ public class AuthController : ControllerBase
     private readonly JwtTokenService _jwt;
     private readonly TelegramOpenIdValidator _openIdValidator;
     private readonly TelegramOAuthClient _oauthClient;
+    private readonly Services.TelegramNotificationService? _telegram;
     private readonly ILogger<AuthController> _logger;
 
     public AuthController(
@@ -27,13 +28,15 @@ public class AuthController : ControllerBase
         JwtTokenService jwt,
         TelegramOpenIdValidator openIdValidator,
         TelegramOAuthClient oauthClient,
-        ILogger<AuthController> logger)
+        ILogger<AuthController> logger,
+        Services.TelegramNotificationService? telegram = null)
     {
         _userRepo = userRepo;
         _tokenRepo = tokenRepo;
         _jwt = jwt;
         _openIdValidator = openIdValidator;
         _oauthClient = oauthClient;
+        _telegram = telegram;
         _logger = logger;
         _appUrl = (config.GetValue<string>("App:Url") ?? "http://localhost:5000").Trim();
         if (!_appUrl.StartsWith("http://") && !_appUrl.StartsWith("https://"))
@@ -53,9 +56,10 @@ public class AuthController : ControllerBase
     /// "code"; it posts that code + its PKCE code_verifier here. The backend
     /// exchanges the code for an id_token using the client secret (which
     /// never touches the browser), then validates that id_token's signature.
-    /// Bot chat linking happens automatically the next time this Telegram
-    /// user hits /start on the bot — <see cref="TelegramNotificationService"/>
-    /// matches by Telegram ID, no manual pairing step needed.
+    /// Right after login we also proactively start the bot dialog
+    /// (<see cref="Services.TelegramNotificationService.TryStartDialogAsync"/>)
+    /// instead of waiting for the user to find the bot and send /start
+    /// themselves — best-effort, falls back to the manual /start path.
     /// </summary>
     [AllowAnonymous]
     [HttpPost("openid")]
@@ -117,6 +121,9 @@ public class AuthController : ControllerBase
                 user.LastLoginAt = DateTime.UtcNow;
                 await _userRepo.UpdateAsync(user, ct);
             }
+
+            if (_telegram is not null)
+                await _telegram.TryStartDialogAsync(user.Id, user.TelegramId, ct);
 
             var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
             var (refreshToken, hash) = _jwt.GenerateRefreshToken();
