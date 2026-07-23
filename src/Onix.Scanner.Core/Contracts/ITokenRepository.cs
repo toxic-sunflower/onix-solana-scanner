@@ -1,4 +1,3 @@
-using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Core.Contracts;
@@ -24,5 +23,4 @@ public interface ITokenRepository
     Task<Dictionary<Guid, decimal>> GetAllQuoteAmountsAsync(CancellationToken ct = default);
     Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default);
     Task<HashSet<Guid>> GetPinnedTokenIdsAsync(Guid userId, CancellationToken ct = default);
-    Task UpdateStatusAsync(Guid tokenId, TokenHealthStatus status, CancellationToken ct = default);
 }

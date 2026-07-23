@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.SignalR;
@@ -26,6 +27,12 @@ public sealed class SpreadEngineService : BackgroundService
 
     private readonly Channel<SpreadTick> _tickChannel =
         System.Threading.Channels.Channel.CreateBounded<SpreadTick>(10000);
+
+    // Token.Status isn't persisted (computed fresh per-request instead, see
+    // TokensController) — track the last computed status here purely to
+    // detect real transitions for the token.status realtime event, so it
+    // doesn't fire every single cycle.
+    private readonly ConcurrentDictionary<Guid, TokenHealthStatus> _lastKnownStatus = new();
 
     public SpreadEngineService(
         ITokenSnapshotPool snapshotPool,
@@ -116,9 +123,10 @@ public sealed class SpreadEngineService : BackgroundService
                 if (_cycleCount % FreeUserInterval == 0)
                     await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.quote", quotePayload, stoppingToken);
 
-                if (status != token.Status)
+                var previousStatus = _lastKnownStatus.GetOrAdd(token.Id, status);
+                if (status != previousStatus)
                 {
-                    await tokenRepo.UpdateStatusAsync(token.Id, status, stoppingToken);
+                    _lastKnownStatus[token.Id] = status;
                     Interlocked.Increment(ref _eventCounter);
                     var statusPayload = new
                     {

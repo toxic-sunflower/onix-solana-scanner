@@ -61,7 +61,7 @@ public class TokensController : ControllerBase
                 dto.BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : null;
                 dto.JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : null;
                 dto.SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw);
-                dto.Status = t.Status;
+                dto.Status = SpreadCalculator.ComputeStatus(t, snap);
                 dto.LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                     ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
                     : null;
@@ -106,7 +106,7 @@ public class TokensController : ControllerBase
                 BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
                 JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
                 SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
-                Status = token.Status,
+                Status = SpreadCalculator.ComputeStatus(token, snap),
                 LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                     ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc)
                     : null,
@@ -120,7 +120,7 @@ public class TokensController : ControllerBase
         {
             Id = token.Id,
             Symbol = token.Symbol,
-            Status = token.Status,
+            Status = SpreadCalculator.ComputeStatus(token, default),
             BingxUrl = token.BingxUrl,
             JupiterUrl = token.JupiterUrl,
             SolscanUrl = token.SolscanUrl

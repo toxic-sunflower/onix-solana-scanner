@@ -56,7 +56,7 @@ public class SpreadHub : Hub
                 jupiter_received_at = snap.JupiterTimestampUtc != 0
                     ? new DateTime(snap.JupiterTimestampUtc, DateTimeKind.Utc) : (DateTime?)null,
                 calculated_at = DateTime.UtcNow,
-                status = token.Status.ToString()
+                status = SpreadCalculator.ComputeStatus(token, snap).ToString()
             });
         }
 
