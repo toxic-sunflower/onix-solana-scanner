@@ -53,14 +53,14 @@ export default function TokenCard({
           {onBlacklist && (
             <button onClick={() => onBlacklist(token.id)}
               title="Blacklist"
-              className="text-sm opacity-0 group-hover:opacity-40 hover:opacity-100 transition-all text-[#64748b]">
+              className="text-sm opacity-0 group-hover:opacity-40 hover:opacity-100 transition-all text-[#64748b] cursor-pointer">
               🚫
             </button>
           )}
           {onFavorite && (
             <button onClick={() => onFavorite(token.id, !isFavorite)}
               title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              className={`text-sm transition-all ${isFavorite ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+              className={`text-sm transition-all cursor-pointer ${isFavorite ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
               {isFavorite ? '⭐' : '☆'}
             </button>
           )}
