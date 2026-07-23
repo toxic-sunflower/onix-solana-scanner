@@ -35,6 +35,16 @@ export async function authFetch(url: string, options?: RequestInit): Promise<Res
   return res;
 }
 
+// SignalR's accessTokenFactory just reads localStorage directly, so once the
+// JWT expires it keeps reconnecting with the same stale token forever
+// (silently, no redirect) unless something else happens to trigger authFetch's
+// refresh-on-401 path first. Call this right before each (re)connect attempt
+// so token refresh/logout-redirect happens here too, not only on REST calls.
+export async function ensureFreshToken(): Promise<string> {
+  await authFetch('/api/v1/auth/check');
+  return localStorage.getItem('auth_token') ?? '';
+}
+
 export function logout() {
   fetch('/api/v1/auth/revoke', {
     method: 'POST',

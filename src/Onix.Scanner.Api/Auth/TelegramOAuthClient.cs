@@ -13,14 +13,16 @@ namespace Onix.Scanner.Api.Auth;
 public sealed class TelegramOAuthClient
 {
     private readonly HttpClient _http;
+    private readonly ILogger<TelegramOAuthClient> _logger;
     private readonly string _tokenEndpoint;
     private readonly string _clientId;
     private readonly string _clientSecret;
     private readonly string _redirectUri;
 
-    public TelegramOAuthClient(IConfiguration config, HttpClient httpClient)
+    public TelegramOAuthClient(IConfiguration config, HttpClient httpClient, ILogger<TelegramOAuthClient> logger)
     {
         _http = httpClient;
+        _logger = logger;
         _tokenEndpoint = config.GetValue<string>("Telegram:OpenId:TokenEndpoint")
             ?? "https://oauth.telegram.org/token";
         _clientId = config.GetValue<string>("Telegram:OpenId:ClientId")
@@ -47,11 +49,21 @@ public sealed class TelegramOAuthClient
         });
 
         using var response = await _http.SendAsync(request, ct);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
         var json = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Telegram token exchange failed: HTTP {Status} from {Endpoint} — body: {Body}",
+                (int)response.StatusCode, _tokenEndpoint, json.Length > 500 ? json[..500] : json);
+            return null;
+        }
+
         using var doc = JsonDocument.Parse(json);
-        return doc.RootElement.TryGetProperty("id_token", out var idTokenEl) ? idTokenEl.GetString() : null;
+        if (doc.RootElement.TryGetProperty("id_token", out var idTokenEl))
+            return idTokenEl.GetString();
+
+        _logger.LogWarning("Telegram token exchange succeeded but response has no id_token — body: {Body}",
+            json.Length > 500 ? json[..500] : json);
+        return null;
     }
 }
