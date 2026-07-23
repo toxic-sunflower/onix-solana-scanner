@@ -111,18 +111,10 @@ public sealed class JupiterWorkerService : BackgroundService
             await limiter.Pacing.WaitAsync(ct);
             try
             {
-                // Spaced by MinIntervalPerGroupMs / GroupConcurrency, not MinIntervalPerGroupMs:
-                // this gate serializes every request START in the group (not just requests
-                // that are actually running), so pacing it at the full interval capped total
-                // throughput at 1 request per MinIntervalPerGroupMs regardless of the
-                // Concurrency semaphore — a 150-token shared group took 150 * 250ms ≈ 37s to
-                // sweep once, which is exactly the "DEX prices take 30-40s to show up" bug.
-                // Interleaving GroupConcurrency lanes at this gate restores the intended
-                // per-lane cadence while actually using the concurrency budget.
                 var now = DateTime.UtcNow;
                 if (now < limiter.NextAllowedStart)
                     await Task.Delay(limiter.NextAllowedStart - now, ct);
-                limiter.NextAllowedStart = DateTime.UtcNow.AddMilliseconds((double)MinIntervalPerGroupMs / GroupConcurrency);
+                limiter.NextAllowedStart = DateTime.UtcNow.AddMilliseconds(MinIntervalPerGroupMs);
             }
             finally
             {
