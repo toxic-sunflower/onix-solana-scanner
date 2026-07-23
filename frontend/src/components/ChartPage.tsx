@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, type IChartApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import type { ChartResponse, UserTokenDto, QuotePayload, TickPoint } from '../types';
-import connection from '../lib/signalr';
+import { on, off } from '../lib/sse';
 
 interface Props {
   tokenId: string;
@@ -38,7 +38,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       .then(res => res.ok ? res.json() : [])
       .then(setTicks);
 
-    connection.on('token.quote', (p: QuotePayload) => {
+    const onQuote = (p: QuotePayload) => {
       if (p.token_id === tokenId) {
         setToken(prev => prev ? {
           ...prev,
@@ -48,9 +48,10 @@ export default function ChartPage({ tokenId, onBack }: Props) {
           lastUpdated: p.calculated_at,
         } : prev);
       }
-    });
+    };
+    on('token.quote', onQuote);
 
-    return () => { connection.off('token.quote'); };
+    return () => { off('token.quote', onQuote); };
   }, [tokenId]);
 
   useEffect(() => {

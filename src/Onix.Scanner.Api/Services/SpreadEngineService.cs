@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Channels;
-using Microsoft.AspNetCore.SignalR;
-using Onix.Scanner.Api.Hubs;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared;
@@ -15,7 +13,7 @@ public sealed class SpreadEngineService : BackgroundService
 {
     private readonly ITokenSnapshotPool _snapshotPool;
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly IHubContext<SpreadHub> _hub;
+    private readonly SseBroadcaster _broadcaster;
     private readonly TelegramNotificationService? _telegram;
     private readonly ILogger<SpreadEngineService> _logger;
 
@@ -37,13 +35,13 @@ public sealed class SpreadEngineService : BackgroundService
     public SpreadEngineService(
         ITokenSnapshotPool snapshotPool,
         IServiceScopeFactory scopeFactory,
-        IHubContext<SpreadHub> hub,
+        SseBroadcaster broadcaster,
         ILogger<SpreadEngineService> logger,
         TelegramNotificationService? telegram = null)
     {
         _snapshotPool = snapshotPool;
         _scopeFactory = scopeFactory;
-        _hub = hub;
+        _broadcaster = broadcaster;
         _telegram = telegram;
         _logger = logger;
     }
@@ -118,10 +116,10 @@ public sealed class SpreadEngineService : BackgroundService
                     calculated_at = tick.CalculatedAt,
                     status = status.ToString()
                 };
-                await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.quote", quotePayload, stoppingToken);
+                _broadcaster.Broadcast(SseBroadcaster.PremiumGroup, "token.quote", quotePayload);
 
                 if (_cycleCount % FreeUserInterval == 0)
-                    await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.quote", quotePayload, stoppingToken);
+                    _broadcaster.Broadcast(SseBroadcaster.FreeGroup, "token.quote", quotePayload);
 
                 var previousStatus = _lastKnownStatus.GetOrAdd(token.Id, status);
                 if (status != previousStatus)
@@ -137,9 +135,9 @@ public sealed class SpreadEngineService : BackgroundService
                         bingx_status = snap.BingxTimestampUtc > 0 ? "ok" : "stale",
                         jupiter_status = snap.JupiterTimestampUtc > 0 ? "ok" : "stale"
                     };
-                    await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.status", statusPayload, stoppingToken);
+                    _broadcaster.Broadcast(SseBroadcaster.PremiumGroup, "token.status", statusPayload);
                     if (_cycleCount % FreeUserInterval == 0)
-                        await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.status", statusPayload, stoppingToken);
+                        _broadcaster.Broadcast(SseBroadcaster.FreeGroup, "token.status", statusPayload);
                 }
 
                 if (spread >= SpreadCalculator.DefaultAlertThresholdPct)
@@ -154,9 +152,9 @@ public sealed class SpreadEngineService : BackgroundService
                         threshold = SpreadCalculator.DefaultAlertThresholdPct,
                         sent_at = DateTime.UtcNow
                     };
-                    await _hub.Clients.Group(SpreadHub.PremiumGroup).SendAsync("token.alert", alertPayload, stoppingToken);
+                    _broadcaster.Broadcast(SseBroadcaster.PremiumGroup, "token.alert", alertPayload);
                     if (_cycleCount % FreeUserInterval == 0)
-                        await _hub.Clients.Group(SpreadHub.FreeGroup).SendAsync("token.alert", alertPayload, stoppingToken);
+                        _broadcaster.Broadcast(SseBroadcaster.FreeGroup, "token.alert", alertPayload);
                 }
 
                 _telegram?.EnqueueAlert(dto);

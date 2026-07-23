@@ -13,7 +13,6 @@ using Onix.Scanner.Core;
 using Onix.Scanner.Infrastructure.Data;
 using Onix.Scanner.Infrastructure;
 using Onix.Scanner.Infrastructure.Services;
-using Onix.Scanner.Api.Hubs;
 using Onix.Scanner.Api.Services;
 
 var envPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", ".env");
@@ -48,7 +47,6 @@ if (File.Exists(envPath))
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddSignalR();
 builder.Services.AddControllers()
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -75,7 +73,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         {
             OnMessageReceived = context =>
             {
-                // Standard Authorization: Bearer header (used by SignalR negotiate)
+                // Standard Authorization: Bearer header (used by regular API calls)
                 var auth = context.Request.Headers.Authorization.FirstOrDefault();
                 if (!string.IsNullOrEmpty(auth) && auth.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
                 {
@@ -91,7 +89,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     return Task.CompletedTask;
                 }
 
-                // Query string token (used by SignalR WebSocket)
+                // Query string token (used by SSE — EventSource can't set custom headers)
                 var qtoken = context.Request.Query["access_token"].FirstOrDefault();
                 if (!string.IsNullOrEmpty(qtoken))
                 {
@@ -137,6 +135,7 @@ builder.Services.AddHttpClient<TelegramOAuthClient>()
     .ConfigurePrimaryHttpMessageHandler(() =>
         new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
 
+builder.Services.AddSingleton<SseBroadcaster>();
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
 builder.Services.AddScoped<ITokenRepository, TokenRepository>();
 builder.Services.AddScoped<IProxyRepository, ProxyRepository>();
@@ -171,7 +170,6 @@ app.UseDefaultFiles();
 app.UseStaticFiles();
 
 app.MapControllers();
-app.MapHub<SpreadHub>("/hubs/spread").RequireAuthorization();
 
 app.MapFallbackToFile("index.html");
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { TickPoint, UserTokenDto } from '../types';
 import { authFetch } from '../lib/auth';
-import connection from '../lib/signalr';
+import { on, off } from '../lib/sse';
 
 interface Props {
   tokenId: string;
@@ -27,13 +27,14 @@ export default function HistoryPage({ tokenId, onBack }: Props) {
       .then(res => res.json())
       .then((data: any) => setToken(data as UserTokenDto));
 
-    connection.on('token.quote', (p: any) => {
+    const onQuote = (p: any) => {
       if (p.token_id === tokenId) {
         setToken(prev => prev ? { ...prev, spreadPct: p.spread_pct, lastUpdated: p.calculated_at } : prev);
       }
-    });
+    };
+    on('token.quote', onQuote);
 
-    return () => { connection.off('token.quote'); };
+    return () => { off('token.quote', onQuote); };
   }, [tokenId]);
 
   useEffect(() => {

@@ -5,6 +5,8 @@ import ChartPage from './components/ChartPage';
 import HistoryPage from './components/HistoryPage';
 import Settings from './components/Settings';
 import Landing from './components/Landing';
+import FavoritesPage from './components/FavoritesPage';
+import BlacklistPage from './components/BlacklistPage';
 import { logout } from './lib/auth';
 
 function AppShell({ children }: { children: React.ReactNode }) {
@@ -39,18 +41,30 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function sharedNavigate(navigate: ReturnType<typeof useNavigate>) {
+  return (page: string, tokenId?: string) => {
+    if (page === 'chart' && tokenId) navigate(`/chart/${tokenId}`);
+    else if (page === 'history' && tokenId) navigate(`/history/${tokenId}`);
+    else if (page === 'settings') navigate('/settings');
+    else if (page === 'favorites') navigate('/favorites');
+    else if (page === 'blacklist') navigate('/blacklist');
+    else navigate('/');
+  };
+}
+
 function DashboardRoute() {
   const navigate = useNavigate();
-  return (
-    <Dashboard
-      onNavigate={(page, tokenId) => {
-        if (page === 'chart' && tokenId) navigate(`/chart/${tokenId}`);
-        else if (page === 'history' && tokenId) navigate(`/history/${tokenId}`);
-        else if (page === 'settings') navigate('/settings');
-        else navigate('/');
-      }}
-    />
-  );
+  return <Dashboard onNavigate={sharedNavigate(navigate)} />;
+}
+
+function FavoritesRoute() {
+  const navigate = useNavigate();
+  return <FavoritesPage onNavigate={sharedNavigate(navigate)} />;
+}
+
+function BlacklistRoute() {
+  const navigate = useNavigate();
+  return <BlacklistPage onNavigate={sharedNavigate(navigate)} />;
 }
 
 function ChartRoute() {
@@ -78,6 +92,8 @@ function AuthenticatedApp() {
       <AppShell>
         <Routes>
           <Route path="/" element={<DashboardRoute />} />
+          <Route path="/favorites" element={<FavoritesRoute />} />
+          <Route path="/blacklist" element={<BlacklistRoute />} />
           <Route path="/chart/:tokenId" element={<ChartRoute />} />
           <Route path="/history/:tokenId" element={<HistoryRoute />} />
           <Route path="/settings" element={<SettingsRoute />} />
