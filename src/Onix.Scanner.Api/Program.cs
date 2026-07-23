@@ -127,8 +127,15 @@ builder.Services.AddNpgsqlDataSource(connectionString);
 builder.Services.AddSingleton<IEncryptionService>(
     new AesEncryptionService(encryptionKey));
 builder.Services.AddSingleton(new JwtTokenService(jwtKey));
-builder.Services.AddHttpClient<TelegramOpenIdValidator>();
-builder.Services.AddHttpClient<TelegramOAuthClient>();
+// oauth.telegram.org responds gzip-compressed; the default HttpClientHandler
+// doesn't auto-decompress, which fed the JWKS/discovery JSON parser raw
+// compressed bytes and blew up with a JsonException.
+builder.Services.AddHttpClient<TelegramOpenIdValidator>()
+    .ConfigurePrimaryHttpMessageHandler(() =>
+        new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
+builder.Services.AddHttpClient<TelegramOAuthClient>()
+    .ConfigurePrimaryHttpMessageHandler(() =>
+        new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
 
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
 builder.Services.AddScoped<ITokenRepository, TokenRepository>();
