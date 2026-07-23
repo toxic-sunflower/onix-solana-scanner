@@ -14,5 +14,6 @@ public class UserTokenDto
     public decimal JupiterBuyPrice { get; set; }
     public decimal SpreadPct { get; set; }
     public bool TelegramEnabled { get; set; } = true;
+    public bool IsPinned { get; set; }
     public DateTime? LastUpdated { get; set; }
 }

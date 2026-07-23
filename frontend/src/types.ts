@@ -11,8 +11,16 @@ export interface UserTokenDto {
   jupiterBuyPrice: number;
   spreadPct: number;
   telegramEnabled: boolean;
+  isPinned: boolean;
   lastUpdated?: string;
   status?: string;
+}
+
+export interface BlacklistedTokenDto {
+  id: string;
+  symbol: string;
+  name?: string;
+  solanaMint: string;
 }
 
 export interface QuotePayload {

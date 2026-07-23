@@ -181,4 +181,47 @@ public class TokenRepository : ITokenRepository
             .ToListAsync(ct)).ToHashSet();
     }
 
+    public async Task<HashSet<Guid>> GetFavoriteTokenIdsAsync(Guid userId, CancellationToken ct = default)
+    {
+        return (await _db.UserTokens
+            .Where(ut => ut.UserId == userId)
+            .Select(ut => ut.TokenId)
+            .ToListAsync(ct)).ToHashSet();
+    }
+
+    public Task<bool> IsBlacklistedAsync(Guid userId, Guid tokenId, CancellationToken ct = default) =>
+        _db.BlacklistedTokens.AnyAsync(b => b.UserId == userId && b.TokenId == tokenId, ct);
+
+    public async Task<HashSet<Guid>> GetBlacklistedTokenIdsAsync(Guid userId, CancellationToken ct = default)
+    {
+        return (await _db.BlacklistedTokens
+            .Where(b => b.UserId == userId)
+            .Select(b => b.TokenId)
+            .ToListAsync(ct)).ToHashSet();
+    }
+
+    public Task<List<Token>> GetBlacklistedTokensAsync(Guid userId, CancellationToken ct = default) =>
+        (from t in _db.Tokens
+         join b in _db.BlacklistedTokens on t.Id equals b.TokenId
+         where b.UserId == userId
+         orderby t.Symbol
+         select t).ToListAsync(ct);
+
+    public async Task BlacklistTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default)
+    {
+        await _db.UserTokens.Where(ut => ut.UserId == userId && ut.TokenId == tokenId).ExecuteDeleteAsync(ct);
+
+        var exists = await _db.BlacklistedTokens.AnyAsync(b => b.UserId == userId && b.TokenId == tokenId, ct);
+        if (!exists)
+        {
+            _db.BlacklistedTokens.Add(new BlacklistedToken { UserId = userId, TokenId = tokenId });
+            await _db.SaveChangesAsync(ct);
+        }
+    }
+
+    public async Task UnblacklistTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default)
+    {
+        await _db.BlacklistedTokens.Where(b => b.UserId == userId && b.TokenId == tokenId).ExecuteDeleteAsync(ct);
+    }
+
 }

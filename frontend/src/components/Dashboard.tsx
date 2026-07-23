@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import type { UserTokenDto, QuotePayload, TickPoint } from '../types';
 import { authFetch } from '../lib/auth';
-import connection, { startConnection } from '../lib/signalr';
+import { on, off, onConnectionChange, startConnection } from '../lib/sse';
 import TokenCard from './TokenCard';
 
 interface TokenInfo {
@@ -10,6 +10,7 @@ interface TokenInfo {
   name?: string;
   solanaMint?: string;
   isPinned: boolean;
+  isFavorite: boolean;
   spreadPct?: number | null;
   bingxAskPrice?: number | null;
   jupiterBuyPrice?: number | null;
@@ -71,7 +72,7 @@ export default function Dashboard({ onNavigate }: Props) {
   }, []);
 
   const connectToHub = () => {
-    startConnection().then(() => setConnected(true));
+    startConnection();
   };
 
   const loadTicks = useCallback((tokenId: string) => {
@@ -92,7 +93,7 @@ export default function Dashboard({ onNavigate }: Props) {
   }, [allTokens, loadTicks]);
 
   useEffect(() => {
-    connection.on('token.quote', (p: QuotePayload) => {
+    const onQuote = (p: QuotePayload) => {
       setAllTokens(prev => {
         const idx = prev.findIndex(t => t.id === p.token_id);
         if (idx < 0) return prev;
@@ -112,13 +113,12 @@ export default function Dashboard({ onNavigate }: Props) {
         };
         return next;
       });
-    });
+    };
+    on('token.quote', onQuote);
 
-    connection.onclose(() => setConnected(false));
-    connection.onreconnecting(() => setConnected(false));
-    connection.onreconnected(() => setConnected(true));
+    const unsubscribeConnection = onConnectionChange(setConnected);
 
-    return () => { connection.off('token.quote'); connection.off('token.status'); };
+    return () => { off('token.quote', onQuote); off('token.status'); unsubscribeConnection(); };
   }, []);
 
   const doPin = async (id: string, isPinned: boolean) => {
@@ -130,6 +130,20 @@ export default function Dashboard({ onNavigate }: Props) {
     setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isPinned } : t));
   };
 
+  const doFavorite = async (id: string, isFavorite: boolean) => {
+    if (isFavorite) {
+      const res = await authFetch('/api/v1/user-tokens', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tokenId: id }),
+      });
+      if (!res.ok) return;
+    } else {
+      await authFetch(`/api/v1/user-tokens/${id}`, { method: 'DELETE' });
+    }
+    setAllTokens(prev => prev.map(t => t.id === id ? { ...t, isFavorite } : t));
+  };
+
   const filtered = useMemo(() => {
     let list = [...allTokens];
     if (search) {
@@ -137,6 +151,10 @@ export default function Dashboard({ onNavigate }: Props) {
       list = list.filter(t => t.symbol.toLowerCase().includes(q) || (t.name ?? '').toLowerCase().includes(q));
     }
     if (filter === 'positive') list = list.filter(t => t.spreadPct != null && t.spreadPct > 0);
+    list.sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      return (b.spreadPct ?? -Infinity) - (a.spreadPct ?? -Infinity);
+    });
     return list;
   }, [allTokens, filter, search]);
 
@@ -152,6 +170,14 @@ export default function Dashboard({ onNavigate }: Props) {
           <button onClick={() => onNavigate('settings')}
             className="px-3 py-1.5 bg-[#1e1f28] rounded text-sm text-[#94a3b8] hover:text-[#f59e0b] transition-colors">⚙ Settings</button>
         </div>
+      </div>
+
+      <div className="flex gap-1.5 mb-3">
+        <button className="px-2.5 py-1 rounded text-xs bg-[#d97706] text-black font-medium">Dashboard</button>
+        <button onClick={() => onNavigate('favorites')}
+          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">⭐ Favorites</button>
+        <button onClick={() => onNavigate('blacklist')}
+          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">🚫 Blacklist</button>
       </div>
 
       <div className="flex gap-1.5 mb-3 flex-wrap items-center">
@@ -173,6 +199,8 @@ export default function Dashboard({ onNavigate }: Props) {
             ticks={ticks.get(t.id)}
             isPinned={t.isPinned}
             onPin={doPin}
+            isFavorite={t.isFavorite}
+            onFavorite={doFavorite}
             onClickChart={(id) => onNavigate('chart', id)}
             onClickHistory={(id) => onNavigate('history', id)} />
         ))}

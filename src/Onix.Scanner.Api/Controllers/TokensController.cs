@@ -33,9 +33,13 @@ public class TokensController : ControllerBase
 
         var userId = User.Identity?.IsAuthenticated == true ? User.GetUserId() : (Guid?)null;
         HashSet<Guid>? pinnedIds = null;
+        HashSet<Guid>? favoriteIds = null;
+        HashSet<Guid>? blacklistedIds = null;
         if (userId.HasValue)
         {
             pinnedIds = await _tokenRepo.GetPinnedTokenIdsAsync(userId.Value);
+            favoriteIds = await _tokenRepo.GetFavoriteTokenIdsAsync(userId.Value);
+            blacklistedIds = await _tokenRepo.GetBlacklistedTokenIdsAsync(userId.Value);
         }
 
         var all = tokens.Select(t =>
@@ -50,6 +54,7 @@ public class TokensController : ControllerBase
                 IsAvailableOnCex = t.IsAvailableOnCex,
                 Popularity = popularity.GetValueOrDefault(t.Id, 0),
                 IsPinned = pinnedIds?.Contains(t.Id) ?? false,
+                IsFavorite = favoriteIds?.Contains(t.Id) ?? false,
                 BingxSymbol = t.BingxSymbol,
                 BingxUrl = t.BingxUrl,
                 JupiterUrl = t.JupiterUrl,
@@ -72,6 +77,11 @@ public class TokensController : ControllerBase
         if (cexOnly == true)
         {
             all = all.Where(t => t.SpreadPct != null).ToList();
+        }
+
+        if (blacklistedIds is { Count: > 0 })
+        {
+            all = all.Where(t => !blacklistedIds.Contains(t.Id)).ToList();
         }
 
         all.Sort((a, b) =>

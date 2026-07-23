@@ -12,6 +12,7 @@ public class AppDbContext : DbContext
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<UserPreferences> UserPreferences => Set<UserPreferences>();
     public DbSet<UserToken> UserTokens => Set<UserToken>();
+    public DbSet<BlacklistedToken> BlacklistedTokens => Set<BlacklistedToken>();
     public DbSet<SpreadTick> SpreadTicks => Set<SpreadTick>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<BlacklistedJti> BlacklistedJtis => Set<BlacklistedJti>();
@@ -116,6 +117,12 @@ public class AppDbContext : DbContext
             e.Property(x => x.AlertThresholdPct).HasColumnType("numeric(10,4)").HasDefaultValue(5.0m);
             e.Property(x => x.IsPinned).HasDefaultValue(false);
             e.Property(x => x.IsArmed).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<BlacklistedToken>(e =>
+        {
+            e.ToTable("blacklisted_tokens");
+            e.HasKey(x => new { x.UserId, x.TokenId });
         });
 
         modelBuilder.Entity<SpreadTick>(e =>

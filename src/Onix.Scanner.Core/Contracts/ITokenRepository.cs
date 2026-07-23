@@ -23,4 +23,10 @@ public interface ITokenRepository
     Task<Dictionary<Guid, decimal>> GetAllQuoteAmountsAsync(CancellationToken ct = default);
     Task PinTokenAsync(Guid userId, Guid tokenId, bool isPinned, CancellationToken ct = default);
     Task<HashSet<Guid>> GetPinnedTokenIdsAsync(Guid userId, CancellationToken ct = default);
+    Task<HashSet<Guid>> GetFavoriteTokenIdsAsync(Guid userId, CancellationToken ct = default);
+    Task<bool> IsBlacklistedAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
+    Task<HashSet<Guid>> GetBlacklistedTokenIdsAsync(Guid userId, CancellationToken ct = default);
+    Task<List<Token>> GetBlacklistedTokensAsync(Guid userId, CancellationToken ct = default);
+    Task BlacklistTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
+    Task UnblacklistTokenAsync(Guid userId, Guid tokenId, CancellationToken ct = default);
 }

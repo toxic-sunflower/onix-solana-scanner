@@ -9,9 +9,15 @@ interface Props {
   onClickHistory: (id: string) => void;
   isPinned?: boolean;
   onPin?: (tokenId: string, isPinned: boolean) => void;
+  isFavorite?: boolean;
+  onFavorite?: (tokenId: string, isFavorite: boolean) => void;
+  onBlacklist?: (tokenId: string) => void;
 }
 
-export default function TokenCard({ token, flash, ticks, onClickChart, onClickHistory, isPinned, onPin }: Props) {
+export default function TokenCard({
+  token, flash, ticks, onClickChart, onClickHistory,
+  isPinned, onPin, isFavorite, onFavorite, onBlacklist,
+}: Props) {
   const hasBingx = (token.bingxAskPrice ?? 0) > 0;
   const hasJupiter = (token.jupiterBuyPrice ?? 0) > 0;
   const hasBoth = hasBingx && hasJupiter;
@@ -44,6 +50,20 @@ export default function TokenCard({ token, flash, ticks, onClickChart, onClickHi
           {token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline">{token.solanaMint}</span>}
         </div>
         <div className="flex items-center gap-2">
+          {onBlacklist && (
+            <button onClick={() => onBlacklist(token.id)}
+              title="Blacklist"
+              className="text-sm opacity-0 group-hover:opacity-40 hover:opacity-100 transition-all text-[#64748b]">
+              🚫
+            </button>
+          )}
+          {onFavorite && (
+            <button onClick={() => onFavorite(token.id, !isFavorite)}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              className={`text-sm transition-all ${isFavorite ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+              {isFavorite ? '⭐' : '☆'}
+            </button>
+          )}
           {onPin && (
             <button onClick={() => onPin(token.id, !isPinned)}
               title={isPinned ? 'Unpin' : 'Pin'}

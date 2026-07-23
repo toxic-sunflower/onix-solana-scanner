@@ -28,6 +28,7 @@ public class UserTokensController : ControllerBase
     {
         var userId = User.GetUserId();
         var tokens = await _tokenRepo.GetByUserIdAsync(userId, ct);
+        var pinnedIds = await _tokenRepo.GetPinnedTokenIdsAsync(userId, ct);
         return Ok(tokens.Select(t =>
         {
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
@@ -46,6 +47,7 @@ public class UserTokensController : ControllerBase
                     BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
                     JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
                     SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
+                    IsPinned = pinnedIds.Contains(t.Id),
                     LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                         ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc) : null,
                 };
@@ -60,6 +62,7 @@ public class UserTokensController : ControllerBase
                 BingxUrl = t.BingxUrl,
                 JupiterUrl = t.JupiterUrl,
                 SolscanUrl = t.SolscanUrl,
+                IsPinned = pinnedIds.Contains(t.Id),
             };
         }).ToList());
     }
@@ -73,6 +76,8 @@ public class UserTokensController : ControllerBase
             return BadRequest(new { error = "Token not found" });
         if (!token.IsAvailableOnCex)
             return BadRequest(new { error = "Token is not available on CEX" });
+        if (await _tokenRepo.IsBlacklistedAsync(userId, token.Id, ct))
+            return BadRequest(new { error = "Token is blacklisted" });
 
         await _tokenRepo.AddUserTokenAsync(userId, token.Id, ct);
         return Ok();
