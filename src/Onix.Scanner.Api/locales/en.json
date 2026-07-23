@@ -3,39 +3,16 @@
   "lang_code": "en",
 
   "welcome": "🧬 *ONIX Solana Scanner*\n\nReal-time arbitrage scanner between BingX Futures and Jupiter DEX.\n\n• Track spreads in real time\n• Get Telegram alerts\n• Manage your watchlist",
-  "register_btn": "Register",
+
   "main_menu": "📱 Main menu",
-  "get_login_link": "Get login link",
-  "login_link": "✅ Tap the button below to enter the dashboard.\n\nLink expires in 5 minutes.",
-  "login_link_backup": "✅ Tap the button below to enter the dashboard.\n\n⚠️ You used a backup code. Go to Settings on the website to set up a new authenticator.",
-  "login_button": "Enter Dashboard",
-  "backup_codes_title": "*Backup codes (save these!):*",
-  "reset_code_label": "*Reset code:* `{code}`",
-  "reset_code_hint": "If you lose access to your authenticator AND backup codes, use this to reset 2FA.",
-  "register_codes_btn": "I've saved the codes — Register",
-  "enter_otp": "Enter your 2FA code to log in.\n\nType the code or send *cancel* to abort.",
-  "enter_otp_for_link": "Enter your 2FA code to get a login link.\n\nType the code or send *cancel* to abort.",
-  "cancel": "Cancel",
-  "cancel_cmd": "Cancelled.",
-  "code_expired": "Code expired. Request a new one.",
-  "too_many_attempts": "You have exhausted the attempt limit. Please try again in 5 minutes.",
-  "invalid_code": "Invalid code. {remaining} attempt(s) remaining.\n\nAfter all attempts are exhausted, you will be blocked for 5 minutes.",
+  "open_app_btn": "Open Scanner",
   "unknown_command": "Unknown command. Send /start",
   "bot_running": "🟢 Scanner is running",
   "user_not_found": "User not found.",
-  "2fa_reset": "✅ 2FA has been reset. You can now log in without a code.\n\nSet up a new authenticator in Settings to enable 2FA again.",
-  "registration_required": "You need to set up two-factor authentication first.\n\nTap *Register* to begin.",
-  "registration_expired": "Registration expired. Try again.",
-  "not_registered": "You are not registered in the system.\n\nTap *Register* to set up two-factor authentication.",
-  "error_generating_link": "Failed to generate login link. Please try again later.",
 
   "signal_title": "🚨 {symbol}  {spread}% (Solana)",
   "signal_profit": "💰 Profit: {spread}%",
   "signal_bingx": "💵 BINGX: ${price}",
   "signal_jupiter": "💵 Jupiter: ${price}",
-  "signal_contract": "📋 Contract: {id}",
-
-  "setup_intro": "To protect your account from unauthorized access, we require two-factor authentication.\n\nAdd this account to your authenticator app and enter the 6-digit code to confirm.",
-  "manual_secret": "Or enter this secret manually: <code>{secret}</code>",
-  "popular_apps": "— Popular authenticator apps:\n<a href=\"https://apps.apple.com/app/google-authenticator/id388497605\">Google Authenticator</a>\n<a href=\"https://authy.com/download\">Authy</a>\n<a href=\"https://www.microsoft.com/en-us/security/mobile-authenticator-app\">Microsoft Authenticator</a>\n<a href=\"https://2fas.com\">2FAS</a>"
+  "signal_contract": "📋 Contract: {id}"
 }

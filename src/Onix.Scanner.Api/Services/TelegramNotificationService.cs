@@ -24,7 +24,6 @@ public sealed class TelegramNotificationService : BackgroundService
     /// via SetWebhookAsync) can feed us updates.</summary>
     public string? WebhookSecret => _webhookSecret;
 
-    private readonly ConcurrentDictionary<long, BotState> _states = new();
     private readonly ConcurrentDictionary<long, int> _lastScreenMsg = new();
 
     private readonly Channel<TokenCardDto> _alertChannel =
@@ -180,17 +179,11 @@ public sealed class TelegramNotificationService : BackgroundService
         var fromId = msg.From?.Id;
         if (fromId is null) return;
 
-        if (_states.TryRemove(chatId, out var oldState))
-            foreach (var mid in oldState.FlowMessageIds)
-                try { await _bot!.DeleteMessage(chatId, mid, ct); } catch { }
-
         if (text.StartsWith("/start"))
         {
             try { await _bot!.DeleteMessage(chatId, msg.MessageId, ct); } catch { }
-            var parts = text.Split(' ');
-            var payload = parts.Length > 1 ? parts[1] : "";
             DetectInitialLanguage(chatId, msg.From?.LanguageCode);
-            await HandleStart(chatId, fromId.Value, msg.From!, payload, msg.MessageId, ct);
+            await HandleStart(chatId, fromId.Value, msg.From!, ct);
         }
         else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
         {
@@ -254,21 +247,14 @@ public sealed class TelegramNotificationService : BackgroundService
                     messageId: query.Message!.MessageId,
                     text: _loc.Get(lang, "main_menu"),
                     parseMode: ParseMode.Markdown,
-                    replyMarkup: new InlineKeyboardMarkup([
-                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "get_login_link"), "get_link")],
-                    ]),
                     cancellationToken: ct);
             }
             else
             {
-                var keyboard = otherLangBtns.Length > 0
-                    ? new InlineKeyboardMarkup([
-                        otherLangBtns.ToArray(),
-                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_btn"), "register_0")],
-                      ])
-                    : new InlineKeyboardMarkup([
-                        [InlineKeyboardButton.WithCallbackData(_loc.Get(lang, "register_btn"), "register_0")],
-                      ]);
+                var keyboard = new InlineKeyboardMarkup([
+                    ..(otherLangBtns.Length > 0 ? new[] { otherLangBtns.ToArray() } : Array.Empty<InlineKeyboardButton[]>()),
+                    [InlineKeyboardButton.WithUrl(_loc.Get(lang, "open_app_btn"), _appUrl)],
+                ]);
 
                 await _bot!.EditMessageText(
                     chatId: chatId.Value,
@@ -281,41 +267,9 @@ public sealed class TelegramNotificationService : BackgroundService
             return;
         }
 
-        if (data.StartsWith("register_") && int.TryParse(data["register_".Length..], out var registerMsgId))
-        {
-            try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
-            if (registerMsgId > 0)
-                try { await _bot!.DeleteMessage(chatId.Value, registerMsgId, ct); } catch { }
-            await StartRegistration(chatId.Value, fromId, ct);
-            return;
-        }
-
         switch (data)
         {
-            case "confirm_registration":
-                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
-                await ShowMainMenu(chatId.Value, ct);
-                break;
-            case "get_link":
-                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
-                break;
-            case "cancel_registration":
-                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
-                if (_states.TryGetValue(chatId.Value, out var cancelState))
-                    foreach (var mid in cancelState.FlowMessageIds)
-                        try { await _bot!.DeleteMessage(chatId.Value, mid, ct); } catch { }
-                using (var cancelScope = _services.CreateScope())
-                {
-                    var cancelRepo = cancelScope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-                    var pendingUser = await cancelRepo.GetByTelegramIdAsync(fromId, ct);
-                    if (pendingUser is not null && pendingUser.Status != "active")
-                        await cancelRepo.DeleteAsync(pendingUser.Id, ct);
-                }
-                _states.TryRemove(chatId.Value, out _);
-                await HandleStart(chatId.Value, fromId, query.From!, "", 0, ct);
-                break;
             case "main_menu":
-                _states.TryRemove(chatId.Value, out _);
                 try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
                 await ShowMainMenu(chatId.Value, ct);
                 break;
@@ -345,7 +299,7 @@ public sealed class TelegramNotificationService : BackgroundService
         }
     }
 
-    private async Task HandleStart(long chatId, long fromId, User tgUser, string payload, int userMsgId, CancellationToken ct)
+    private async Task HandleStart(long chatId, long fromId, User tgUser, CancellationToken ct)
     {
         using var scope = _services.CreateScope();
         var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
@@ -386,15 +340,10 @@ public sealed class TelegramNotificationService : BackgroundService
 
             await DeletePreviousScreen(chatId, ct);
 
-            var registerData = $"register_{userMsgId}";
-            var keyboard = langBtns.Length > 0
-                ? new InlineKeyboardMarkup([
-                    langBtns.ToArray(),
-                    [InlineKeyboardButton.WithCallbackData(_loc.Get(currentLang, "register_btn"), registerData)],
-                  ])
-                : new InlineKeyboardMarkup([
-                    [InlineKeyboardButton.WithCallbackData(_loc.Get(currentLang, "register_btn"), registerData)],
-                  ]);
+            var keyboard = new InlineKeyboardMarkup([
+                ..(langBtns.Length > 0 ? new[] { langBtns.ToArray() } : Array.Empty<InlineKeyboardButton[]>()),
+                [InlineKeyboardButton.WithUrl(_loc.Get(currentLang, "open_app_btn"), _appUrl)],
+            ]);
 
             var welcomeMsg = await _bot!.SendMessage(
                 chatId: chatId,
@@ -414,44 +363,6 @@ public sealed class TelegramNotificationService : BackgroundService
             await ShowMainMenu(chatId, ct);
         }
     }
-
-    // ── Registration flow ──
-
-    private async Task StartRegistration(long chatId, long fromId, CancellationToken ct,
-        Shared.Models.User? existingUser = null)
-    {
-        var lang = _loc.GetLanguage(chatId);
-
-        using var scope = _services.CreateScope();
-        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
-        var tokenRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.ITokenRepository>();
-
-        Shared.Models.User user;
-        if (existingUser is not null)
-        {
-            existingUser.Status = "active";
-            existingUser.Language = lang;
-            await userRepo.UpdateAsync(existingUser, ct);
-            user = existingUser;
-        }
-        else
-        {
-            user = new Shared.Models.User
-            {
-                TelegramId = fromId,
-                DisplayName = fromId.ToString(),
-                Status = "active",
-                Language = lang,
-            };
-            user = await userRepo.CreateAsync(user, ct);
-            await userRepo.UpdateChatIdAsync(user.Id, chatId, ct);
-            await tokenRepo.AddDefaultTokensAsync(user.Id, ct);
-        }
-
-        await DeletePreviousScreen(chatId, ct);
-        await ShowMainMenu(chatId, ct);
-    }
-
 
     // ── Language detection ──
 
@@ -474,27 +385,13 @@ public sealed class TelegramNotificationService : BackgroundService
 
     private async Task ShowMainMenu(long chatId, CancellationToken ct)
     {
-        var keyboard = new InlineKeyboardMarkup([
-            [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "get_login_link"), "get_link")],
-        ]);
-
         await DeletePreviousScreen(chatId, ct);
         var msg = await _bot!.SendMessage(
             chatId: chatId,
             text: _loc.Get(chatId, "main_menu"),
-            replyMarkup: keyboard,
-            cancellationToken: ct);
-        _lastScreenMsg[chatId] = msg.MessageId;
-    }
-
-    private async Task ShowRegistrationRequired(long chatId, CancellationToken ct)
-    {
-        var msg = await _bot!.SendMessage(
-            chatId: chatId,
-            text: _loc.Get(chatId, "not_registered"),
-            parseMode: ParseMode.Markdown,
-            replyMarkup: new InlineKeyboardMarkup(
-                InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "register_btn"), "register_0")),
+            replyMarkup: new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithUrl(_loc.Get(chatId, "open_app_btn"), _appUrl)],
+            ]),
             cancellationToken: ct);
         _lastScreenMsg[chatId] = msg.MessageId;
     }
@@ -533,14 +430,4 @@ public sealed class TelegramNotificationService : BackgroundService
         _logger.LogInformation("Telegram signal sent: chat_id={ChatId} message_id={MessageId} symbol={Symbol} spread={Spread:F2}%",
             chatId, sent.MessageId, dto.Symbol, dto.SpreadPct);
     }
-}
-
-enum BotStep { None, Registration }
-
-class BotState
-{
-    public BotStep State { get; set; }
-    public Guid UserId { get; set; }
-    public string Purpose { get; set; } = "";
-    public List<int> FlowMessageIds { get; set; } = new();
 }
