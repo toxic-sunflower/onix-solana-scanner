@@ -57,25 +57,33 @@ jobs:
             cd "$PROJ_DIR"
             echo "📍 Project dir: $PROJ_DIR"
 
+            ACTIVE=$(cat .active_color 2>/dev/null || echo "")
+            if [ -z "$ACTIVE" ]; then
+              echo "❌ No .active_color set — don't know which service (app_blue/app_green) is active"
+              exit 1
+            fi
+            SERVICE="app_$ACTIVE"
+            echo "📍 Active service: $SERVICE"
+
             case "${{ inputs.command }}" in
               start)
-                docker compose up -d app
+                docker compose up -d "$SERVICE"
                 echo "✅ Service started"
                 ;;
               stop)
-                docker compose stop app
+                docker compose stop "$SERVICE"
                 echo "⏹️ Service stopped"
                 ;;
               restart)
-                docker compose restart app
+                docker compose restart "$SERVICE"
                 echo "🔄 Service restarted"
                 ;;
               logs)
-                docker compose logs --tail=50 app
+                docker compose logs --tail=50 "$SERVICE"
                 ;;
               status)
-                docker compose ps app
+                docker compose ps "$SERVICE"
                 echo "---"
-                docker compose logs --tail=5 app
+                docker compose logs --tail=5 "$SERVICE"
                 ;;
             esac
