@@ -166,18 +166,6 @@ export default function Dashboard({ onNavigate }: Props) {
           <h2 className="text-lg font-bold text-[#f1f5f9]">Dashboard</h2>
           <span className="text-xs text-[#475569] tabular-nums">{ago(latestUpdate ?? undefined)}</span>
         </div>
-        <div className="flex gap-2">
-          <button onClick={() => onNavigate('settings')}
-            className="px-3 py-1.5 bg-[#1e1f28] rounded text-sm text-[#94a3b8] hover:text-[#f59e0b] transition-colors">⚙ Settings</button>
-        </div>
-      </div>
-
-      <div className="flex gap-1.5 mb-3">
-        <button className="px-2.5 py-1 rounded text-xs bg-[#d97706] text-black font-medium">Dashboard</button>
-        <button onClick={() => onNavigate('favorites')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">⭐ Favorites</button>
-        <button onClick={() => onNavigate('blacklist')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">🚫 Blacklist</button>
       </div>
 
       <div className="flex gap-1.5 mb-3 flex-wrap items-center">

@@ -96,14 +96,6 @@ export default function FavoritesPage({ onNavigate }: Props) {
         </div>
       </div>
 
-      <div className="flex gap-1.5 mb-3">
-        <button onClick={() => onNavigate('dashboard')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">Dashboard</button>
-        <button className="px-2.5 py-1 rounded text-xs bg-[#d97706] text-black font-medium">⭐ Favorites</button>
-        <button onClick={() => onNavigate('blacklist')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">🚫 Blacklist</button>
-      </div>
-
       <div className="flex flex-col gap-2.5">
         {sorted.map(t => (
           <TokenCard key={t.id} token={t}

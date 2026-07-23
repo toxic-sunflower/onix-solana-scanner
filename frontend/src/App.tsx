@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { HashRouter, Routes, Route, useNavigate, useParams, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, useNavigate, useLocation, useParams, Navigate } from 'react-router-dom';
 import Dashboard from './components/Dashboard';
 import ChartPage from './components/ChartPage';
 import HistoryPage from './components/HistoryPage';
@@ -8,6 +8,32 @@ import Landing from './components/Landing';
 import FavoritesPage from './components/FavoritesPage';
 import BlacklistPage from './components/BlacklistPage';
 import { logout } from './lib/auth';
+
+const TABS = [
+  { path: '/', label: 'Dashboard' },
+  { path: '/favorites', label: '⭐ Favorites' },
+  { path: '/blacklist', label: '🚫 Blacklist' },
+] as const;
+
+function TabNav() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  if (!TABS.some(t => t.path === location.pathname)) return null;
+
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-2 flex items-center gap-1.5">
+      {TABS.map(t => (
+        <button key={t.path} onClick={() => navigate(t.path)}
+          className={`px-2.5 py-1 rounded text-xs transition-colors ${location.pathname === t.path ? 'bg-[#d97706] text-black font-medium' : 'bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8]'}`}>
+          {t.label}
+        </button>
+      ))}
+      <button onClick={() => navigate('/settings')}
+        className="ml-auto px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#94a3b8] hover:text-[#f59e0b] transition-colors">⚙ Settings</button>
+    </div>
+  );
+}
 
 function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
@@ -28,13 +54,10 @@ function AppShell({ children }: { children: React.ReactNode }) {
       <header className="border-b border-[#2a2b36] bg-[#0d0e12] sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 h-10 flex items-center justify-between">
           <h1 className="text-sm font-bold text-[#f59e0b] tracking-wide">ONIX SCANNER</h1>
-          <div className="flex gap-1.5">
-            <button onClick={() => navigate('/settings')}
-              className="px-3 py-1 text-xs rounded bg-[#1e1f28] text-[#94a3b8] hover:bg-[#2a2b36] hover:text-[#f1f5f9] transition-colors">Settings</button>
-            <button onClick={logout}
-              className="px-3 py-1 text-xs rounded bg-[#1e1f28] text-[#94a3b8] hover:bg-[#2a2b36] hover:text-[#f1f5f9] transition-colors">Logout</button>
-          </div>
+          <button onClick={logout}
+            className="px-3 py-1 text-xs rounded bg-[#1e1f28] text-[#94a3b8] hover:bg-[#2a2b36] hover:text-[#f1f5f9] transition-colors">Logout</button>
         </div>
+        <TabNav />
       </header>
       {children}
     </div>
@@ -63,8 +86,7 @@ function FavoritesRoute() {
 }
 
 function BlacklistRoute() {
-  const navigate = useNavigate();
-  return <BlacklistPage onNavigate={sharedNavigate(navigate)} />;
+  return <BlacklistPage />;
 }
 
 function ChartRoute() {

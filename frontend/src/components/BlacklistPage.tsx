@@ -2,11 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import type { BlacklistedTokenDto } from '../types';
 import { authFetch } from '../lib/auth';
 
-interface Props {
-  onNavigate: (page: string) => void;
-}
-
-export default function BlacklistPage({ onNavigate }: Props) {
+export default function BlacklistPage() {
   const [tokens, setTokens] = useState<BlacklistedTokenDto[]>([]);
 
   const load = useCallback(async () => {
@@ -25,14 +21,6 @@ export default function BlacklistPage({ onNavigate }: Props) {
     <div className="p-4 max-w-4xl mx-auto">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-bold text-[#f1f5f9]">Blacklist</h2>
-      </div>
-
-      <div className="flex gap-1.5 mb-3">
-        <button onClick={() => onNavigate('dashboard')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">Dashboard</button>
-        <button onClick={() => onNavigate('favorites')}
-          className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">⭐ Favorites</button>
-        <button className="px-2.5 py-1 rounded text-xs bg-[#d97706] text-black font-medium">🚫 Blacklist</button>
       </div>
 
       <div className="flex flex-col gap-2">
