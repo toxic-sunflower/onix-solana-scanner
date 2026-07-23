@@ -102,6 +102,15 @@ public class SpreadTickRepository : ISpreadTickRepository
             .ToListAsync(ct);
     }
 
+    public Task<List<SpreadTick>> GetLatestTicksAsync(CancellationToken ct = default) =>
+        _db.SpreadTicks
+            .FromSqlRaw("""
+                SELECT DISTINCT ON ("TokenId") *
+                FROM spread_ticks
+                ORDER BY "TokenId", "CalculatedAt" DESC
+                """)
+            .ToListAsync(ct);
+
     public async Task CleanupOldTicksAsync(CancellationToken ct = default)
     {
         await _db.SpreadTicks

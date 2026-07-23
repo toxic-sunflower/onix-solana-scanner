@@ -144,6 +144,7 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserSettingsRepository, UserSettingsRepository>();
 
 builder.Services.AddHostedService<MigratorService>();
+builder.Services.AddHostedService<SnapshotWarmupService>();
 builder.Services.AddHostedService<BingXConnectorService>();
 builder.Services.AddHostedService<SpreadEngineService>();
 builder.Services.AddHostedService<JupiterWorkerService>();
