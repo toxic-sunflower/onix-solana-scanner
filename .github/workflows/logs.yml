@@ -4,9 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       lines:
-        description: "How many log lines per container"
+        description: "How many log lines per container (ignored if 'search' is set)"
         required: false
         default: "200"
+      search:
+        description: "If set, greps the FULL log history (not just the tail) for this string instead of tailing"
+        required: false
+        default: ""
 
 jobs:
   logs:
@@ -18,7 +22,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: app
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: LINES
+          envs: LINES,SEARCH
           script: |
             cd /home/app/onix
 
@@ -51,9 +55,16 @@ jobs:
                 || docker inspect --format='{{json .State.Health}}' "onix_app_$color" 2>/dev/null \
                 || echo "(container not found)"
 
-              echo
-              echo "=== app_$color: last $LINES log lines ==="
-              docker compose logs --tail="$LINES" "app_$color" 2>&1 || echo "(no logs)"
+              if [ -n "$SEARCH" ]; then
+                echo
+                echo "=== app_$color: FULL log history grep for '$SEARCH' (with context) ==="
+                docker compose logs --no-log-prefix "app_$color" 2>&1 | grep -B2 -A15 -- "$SEARCH" || echo "(no matches in full history)"
+              else
+                echo
+                echo "=== app_$color: last $LINES log lines ==="
+                docker compose logs --tail="$LINES" "app_$color" 2>&1 || echo "(no logs)"
+              fi
             done
         env:
           LINES: ${{ github.event.inputs.lines }}
+          SEARCH: ${{ github.event.inputs.search }}
