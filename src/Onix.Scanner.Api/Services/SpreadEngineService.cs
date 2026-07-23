@@ -118,6 +118,7 @@ public sealed class SpreadEngineService : BackgroundService
 
                 if (status != token.Status)
                 {
+                    await tokenRepo.UpdateStatusAsync(token.Id, status, stoppingToken);
                     Interlocked.Increment(ref _eventCounter);
                     var statusPayload = new
                     {

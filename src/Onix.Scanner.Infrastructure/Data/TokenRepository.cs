@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Onix.Scanner.Core.Contracts;
+using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Infrastructure.Data;
@@ -179,5 +180,14 @@ public class TokenRepository : ITokenRepository
             .Where(ut => ut.UserId == userId && ut.IsPinned)
             .Select(ut => ut.TokenId)
             .ToListAsync(ct)).ToHashSet();
+    }
+
+    public async Task UpdateStatusAsync(Guid tokenId, TokenHealthStatus status, CancellationToken ct = default)
+    {
+        await _db.Tokens
+            .Where(t => t.Id == tokenId)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(t => t.Status, status)
+                .SetProperty(t => t.UpdatedAt, DateTime.UtcNow), ct);
     }
 }
