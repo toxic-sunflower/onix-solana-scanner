@@ -11,6 +11,10 @@ body {
   color: #f1f5f9;
 }
 
+button:not(:disabled) {
+  cursor: pointer;
+}
+
 @keyframes shimmer {
   0% { opacity: 0.4; }
   50% { opacity: 1; }
