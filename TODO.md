@@ -52,8 +52,22 @@
 - [x] **Настройки уведомлений в боте.** Команда `/settings` — показывает
       текущий порог/cooldown/статус уведомлений, кнопка-тумблер
       `toggle_notifications` (пишет в `UserSettings` напрямую), кнопка
-      "Open full settings" на полный Mini App (выбор токенов/кастомных пар
-      там уже есть — не дублировали отдельным чат-флоу).
+      "Open full settings" на полный Mini App. **Поправка** (изначально тут
+      было неверно написано "выбор токенов/кастомных пар там уже есть" — это
+      было неправдой, только что закрыто отдельным пунктом ниже, см. "Per-
+      token Telegram alert config").
+- [x] **Per-token Telegram alert config (Mini App).** Реальный пробел,
+      который нашёл пользователь: `UserToken.TelegramEnabled`/
+      `AlertThresholdPct` существовали в БД и использовались в
+      `GetSubscribersAsync`, но не было ни эндпоинта, ни UI их редактировать
+      — только глобальный порог в `/settings`. Добавлено:
+      `PATCH /api/v1/user-tokens/{tokenId}/telegram`
+      (`{telegramEnabled?, alertThresholdPct?}`), `ITokenRepository.
+      SetUserTokenTelegramSettingsAsync`/`GetUserTokenAlertSettingsAsync`.
+      На `/favorites` — 🔔/🔕 тумблер на каждой карточке + инлайн-поле
+      порога (`≥ X%`), сохраняется по blur. `Dashboard`/`Blacklist` не
+      получили эти пропсы (там нет своей `user_tokens`-строки на токен вне
+      избранного — не имеет смысла).
 - [x] **Удалить аккаунт из бота.** Команда `/deleteaccount` — inline
       confirm/cancel, вызывает существующий `IUserRepository.DeleteAsync`
       напрямую (без похода в Mini App).

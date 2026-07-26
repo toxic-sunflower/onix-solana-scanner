@@ -55,6 +55,7 @@ full flow description.
 | POST | `/user-tokens` | required | `{tokenId}` — add to favorites. 400 if the token is blacklisted for this user. |
 | DELETE | `/user-tokens/{tokenId}` | required | Remove from favorites. |
 | PATCH | `/user-tokens/{tokenId}/pin` | required | `{isPinned}` — pin/unpin (shared with Dashboard). |
+| PATCH | `/user-tokens/{tokenId}/telegram` | required | `{telegramEnabled?, alertThresholdPct?}` — per-token Telegram alert config, independent of the global `MinimalSpreadPct` in `/settings`. Token must already be favorited (a `user_tokens` row must exist). |
 
 ## Blacklist (per-user)
 

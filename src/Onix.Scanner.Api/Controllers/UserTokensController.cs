@@ -29,8 +29,11 @@ public class UserTokensController : ControllerBase
         var userId = User.GetUserId();
         var tokens = await _tokenRepo.GetByUserIdAsync(userId, ct);
         var pinnedIds = await _tokenRepo.GetPinnedTokenIdsAsync(userId, ct);
+        var alertSettings = await _tokenRepo.GetUserTokenAlertSettingsAsync(userId, ct);
         return Ok(tokens.Select(t =>
         {
+            var (telegramEnabled, alertThresholdPct) = alertSettings.TryGetValue(t.Id, out var s) ? s : (true, 5m);
+
             if (_snapshotPool.TryGetIndex(t.Id, out var idx))
             {
                 var snap = _snapshotPool.ReadSnapshot(idx);
@@ -47,6 +50,8 @@ public class UserTokensController : ControllerBase
                     BingxAskPrice = snap.BingxAskPriceRaw != 0 ? snap.BingxAskPriceRaw / 1e18m : 0,
                     JupiterBuyPrice = snap.JupiterBuyPriceRaw != 0 ? snap.JupiterBuyPriceRaw / 1e18m : 0,
                     SpreadPct = SpreadCalculator.CalculateSpread(snap.BingxAskPriceRaw, snap.JupiterBuyPriceRaw),
+                    TelegramEnabled = telegramEnabled,
+                    AlertThresholdPct = alertThresholdPct,
                     IsPinned = pinnedIds.Contains(t.Id),
                     LastUpdated = snap.BingxTimestampUtc != 0 || snap.JupiterTimestampUtc != 0
                         ? new DateTime(Math.Max(snap.BingxTimestampUtc, snap.JupiterTimestampUtc), DateTimeKind.Utc) : null,
@@ -62,6 +67,8 @@ public class UserTokensController : ControllerBase
                 BingxUrl = t.BingxUrl,
                 JupiterUrl = t.JupiterUrl,
                 SolscanUrl = t.SolscanUrl,
+                TelegramEnabled = telegramEnabled,
+                AlertThresholdPct = alertThresholdPct,
                 IsPinned = pinnedIds.Contains(t.Id),
             };
         }).ToList());
@@ -99,6 +106,19 @@ public class UserTokensController : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Per-token Telegram alert config (TODO.md "Настройки уведомлений
+    /// — выбор токенов для мониторинга, пороги спреда") — whether this
+    /// specific favorited token pages via Telegram, and at what threshold,
+    /// independent of the global MinimalSpreadPct in /settings.</summary>
+    [HttpPatch("{tokenId:guid}/telegram")]
+    public async Task<ActionResult> SetTelegramSettings(Guid tokenId, [FromBody] TelegramSettingsRequest request, CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        await _tokenRepo.SetUserTokenTelegramSettingsAsync(userId, tokenId, request.TelegramEnabled, request.AlertThresholdPct, ct);
+        return NoContent();
+    }
+
     public record AddTokenRequest(Guid TokenId);
     public record PinTokenRequest(bool IsPinned);
+    public record TelegramSettingsRequest(bool? TelegramEnabled, decimal? AlertThresholdPct);
 }

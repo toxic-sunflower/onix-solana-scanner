@@ -78,6 +78,24 @@ export default function FavoritesPage({ onNavigate }: Props) {
     if (res.ok) setTokens(prev => prev.filter(t => t.id !== id));
   };
 
+  const doToggleTelegram = async (id: string, enabled: boolean) => {
+    await authFetch(`/api/v1/user-tokens/${id}/telegram`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ telegramEnabled: enabled }),
+    });
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, telegramEnabled: enabled } : t));
+  };
+
+  const doSetThreshold = async (id: string, value: number) => {
+    await authFetch(`/api/v1/user-tokens/${id}/telegram`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ alertThresholdPct: value }),
+    });
+    setTokens(prev => prev.map(t => t.id === id ? { ...t, alertThresholdPct: value } : t));
+  };
+
   const sorted = useMemo(() => {
     const list = [...tokens];
     list.sort((a, b) => {
@@ -106,6 +124,8 @@ export default function FavoritesPage({ onNavigate }: Props) {
             isFavorite
             onFavorite={doUnfavorite}
             onBlacklist={doBlacklist}
+            onToggleTelegramEnabled={doToggleTelegram}
+            onSetTokenAlertThreshold={doSetThreshold}
             onClickChart={(id) => onNavigate('chart', id)}
             onClickHistory={(id) => onNavigate('history', id)} />
         ))}

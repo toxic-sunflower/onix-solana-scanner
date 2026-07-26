@@ -11,6 +11,7 @@ export interface UserTokenDto {
   jupiterBuyPrice: number;
   spreadPct: number;
   telegramEnabled: boolean;
+  alertThresholdPct: number;
   isPinned: boolean;
   lastUpdated?: string;
   status?: string;

@@ -192,6 +192,24 @@ public class TokenRepository : ITokenRepository
             .ToListAsync(ct)).ToHashSet();
     }
 
+    public async Task<Dictionary<Guid, (bool TelegramEnabled, decimal AlertThresholdPct)>> GetUserTokenAlertSettingsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var rows = await _db.UserTokens
+            .Where(ut => ut.UserId == userId)
+            .Select(ut => new { ut.TokenId, ut.TelegramEnabled, ut.AlertThresholdPct })
+            .ToListAsync(ct);
+        return rows.ToDictionary(r => r.TokenId, r => (r.TelegramEnabled, r.AlertThresholdPct));
+    }
+
+    public async Task SetUserTokenTelegramSettingsAsync(Guid userId, Guid tokenId, bool? telegramEnabled, decimal? alertThresholdPct, CancellationToken ct = default)
+    {
+        var ut = await _db.UserTokens.FindAsync([userId, tokenId], ct);
+        if (ut is null) return;
+        if (telegramEnabled.HasValue) ut.TelegramEnabled = telegramEnabled.Value;
+        if (alertThresholdPct.HasValue) ut.AlertThresholdPct = alertThresholdPct.Value;
+        await _db.SaveChangesAsync(ct);
+    }
+
     public async Task<HashSet<Guid>> GetFavoriteTokenIdsAsync(Guid userId, CancellationToken ct = default)
     {
         return (await _db.UserTokens

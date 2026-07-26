@@ -20,11 +20,18 @@ interface Props {
   /** Dashboard column visibility (TODO.md "Внешний вид — настройка колонок
    * на dashboard"), persisted client-side. All default to visible. */
   columns?: { name?: boolean; mint?: boolean; links?: boolean; recentLog?: boolean };
+  /** Per-token Telegram alert config (TODO.md "Настройки уведомлений — выбор
+   * токенов для мониторинга, пороги спреда") — only rendered when a handler
+   * is passed (currently just FavoritesPage; Dashboard/Blacklist don't own
+   * a user_tokens row to edit here). */
+  onToggleTelegramEnabled?: (tokenId: string, enabled: boolean) => void;
+  onSetTokenAlertThreshold?: (tokenId: string, value: number) => void;
 }
 
 export default function TokenCard({
   token, flash, ticks, onClickChart, onClickHistory,
   isPinned, onPin, isFavorite, onFavorite, onBlacklist, alertThreshold, columns,
+  onToggleTelegramEnabled, onSetTokenAlertThreshold,
 }: Props) {
   const showName = columns?.name ?? true;
   const showMint = columns?.mint ?? true;
@@ -62,39 +69,10 @@ export default function TokenCard({
           {showName && token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
           {showMint && token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline">{token.solanaMint}</span>}
         </div>
-        <div className="flex items-center gap-2">
-          {isAlerting && (
-            <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 text-[#2AABEE]">
-              <title>{`Telegram alert: spread >= ${alertThreshold}% (your threshold)`}</title>
-              <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.301.48-.428-.008-1.252-.242-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.831-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
-            </svg>
-          )}
-          {onBlacklist && (
-            <button onClick={() => onBlacklist(token.id)}
-              title="Blacklist"
-              className="text-sm opacity-0 group-hover:opacity-40 hover:opacity-100 transition-all text-[#64748b] cursor-pointer">
-              🚫
-            </button>
-          )}
-          {onFavorite && (
-            <button onClick={() => onFavorite(token.id, !isFavorite)}
-              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              className={`text-sm transition-all cursor-pointer ${isFavorite ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
-              {isFavorite ? '⭐' : '☆'}
-            </button>
-          )}
-          {onPin && (
-            <button onClick={() => onPin(token.id, !isPinned)}
-              title={isPinned ? 'Unpin' : 'Pin'}
-              className={`text-sm transition-all ${isPinned ? 'text-[#f59e0b] opacity-100' : 'opacity-0 group-hover:opacity-40 hover:opacity-100 text-[#64748b]'}`}>
-              📌
-            </button>
-          )}
-          <span className={`text-2xl font-bold font-mono tabular-nums tracking-tight ${spreadAbs > 0 ? (token.spreadPct > 0 ? 'text-[#22c55e]' : 'text-[#ef4444]') : 'text-[#64748b]'}`}>
-            {spreadAbs > 0 ? `${token.spreadPct >= 0 ? '+' : ''}${token.spreadPct.toFixed(2)}%` : '---'}
-            {spreadDir && <span className="text-3xl ml-1">{spreadDir}</span>}
-          </span>
-        </div>
+        <span className={`text-2xl font-bold font-mono tabular-nums tracking-tight text-right inline-block min-w-[11ch] ${spreadAbs > 0 ? (token.spreadPct > 0 ? 'text-[#22c55e]' : 'text-[#ef4444]') : 'text-[#64748b]'}`}>
+          {spreadAbs > 0 ? `${token.spreadPct >= 0 ? '+' : ''}${token.spreadPct.toFixed(2)}%` : '---'}
+          {spreadDir && <span className="text-3xl ml-1">{spreadDir}</span>}
+        </span>
       </div>
 
       <div className="grid grid-cols-2 gap-2 text-sm">
@@ -119,6 +97,50 @@ export default function TokenCard({
       </div>
 
       <div className="flex gap-1.5 mt-0.5 items-center">
+        {onBlacklist && (
+          <button onClick={() => onBlacklist(token.id)}
+            title="Blacklist"
+            className="text-sm opacity-40 hover:opacity-100 transition-all text-[#64748b] cursor-pointer">
+            🚫
+          </button>
+        )}
+        {onFavorite && (
+          <button onClick={() => onFavorite(token.id, !isFavorite)}
+            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            className={`text-sm transition-all cursor-pointer ${isFavorite ? 'text-[#f59e0b] opacity-100' : 'opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+            {isFavorite ? '⭐' : '☆'}
+          </button>
+        )}
+        {onPin && (
+          <button onClick={() => onPin(token.id, !isPinned)}
+            title={isPinned ? 'Unpin' : 'Pin'}
+            className={`text-sm transition-all ${isPinned ? 'text-[#f59e0b] opacity-100' : 'opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+            📌
+          </button>
+        )}
+        {onToggleTelegramEnabled ? (
+          <button onClick={() => onToggleTelegramEnabled(token.id, !token.telegramEnabled)}
+            title={token.telegramEnabled ? 'Telegram alerts on for this token — click to mute' : 'Telegram alerts muted for this token — click to unmute'}
+            className={`text-sm transition-all cursor-pointer ${token.telegramEnabled ? 'text-[#2AABEE] opacity-100' : 'opacity-40 hover:opacity-100 text-[#64748b]'}`}>
+            {token.telegramEnabled ? '🔔' : '🔕'}
+          </button>
+        ) : isAlerting && (
+          <span title={`Telegram alert: spread >= ${alertThreshold}% (your threshold)`}
+            className="text-sm text-[#2AABEE]">🔔</span>
+        )}
+        {onSetTokenAlertThreshold && (
+          <label title="Telegram alert threshold for this token" className="flex items-center gap-0.5 text-[10px] text-[#64748b]">
+            ≥
+            <input type="number" step="0.1" defaultValue={token.alertThresholdPct}
+              onBlur={e => {
+                const v = parseFloat(e.target.value);
+                if (!Number.isNaN(v)) onSetTokenAlertThreshold(token.id, v);
+              }}
+              className="w-12 px-1 py-0.5 bg-[#16171d] border border-[#2a2b36] rounded text-[10px] text-[#f1f5f9] focus:outline-none focus:border-[#f59e0b]" />
+            %
+          </label>
+        )}
+        {(isAlerting || onBlacklist || onFavorite || onPin || onToggleTelegramEnabled || onSetTokenAlertThreshold) && <span className="w-px h-4 bg-[#2a2b36] mx-1" />}
         {showLinks && token.bingxUrl && (
           <a href={token.bingxUrl} target="_blank" rel="noreferrer"
             className="text-xs px-2 py-1 rounded bg-[#1e1f28] text-[#94a3b8] hover:text-[#f59e0b] hover:bg-[#2a2b36] transition-colors">BingX</a>
