@@ -38,6 +38,15 @@ public sealed class JupiterWorkerService : BackgroundService
     private readonly ConcurrentDictionary<Guid, DateTime> _lastErrorLogAt = new();
     private static readonly TimeSpan ErrorLogThrottle = TimeSpan.FromSeconds(60);
 
+    // Per-token 429 backoff. Deliberately NOT on the shared GroupLimiter: that
+    // gate is keyed by proxy group, so a rate-limit hit on ANY one token in a
+    // shared (no-proxy) group used to freeze every other token sharing that
+    // group for 15-31s too — with ~100+ tokens piled into "__shared", this
+    // was the actual cause of ticks arriving rarely for those tokens, not
+    // just an unlucky one. Scoping the backoff to the offending token only
+    // means the rest of the group keeps polling normally.
+    private readonly ConcurrentDictionary<Guid, DateTime> _tokenBackoffUntil = new();
+
     /// <summary>Logs failures at Warning (visible at default log level) but at
     /// most once per token per minute — this runs per-token every ~1s, so
     /// logging every occurrence would flood the log instead of explaining
@@ -102,6 +111,9 @@ public sealed class JupiterWorkerService : BackgroundService
 
     private async Task FetchTokenQuoteAsync(Token token, Proxy? proxy, decimal quoteAmount, CancellationToken ct)
     {
+        if (_tokenBackoffUntil.TryGetValue(token.Id, out var backoffUntil) && DateTime.UtcNow < backoffUntil)
+            return;
+
         var groupKey = proxy?.Id.ToString() ?? "__shared";
         var limiter = _groupLimiters.GetOrAdd(groupKey, _ => new GroupLimiter());
 
@@ -137,8 +149,8 @@ public sealed class JupiterWorkerService : BackgroundService
 
                 if ((int)response.StatusCode == 429)
                 {
-                    limiter.NextAllowedStart = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
-                    _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group})", token.Symbol, groupKey);
+                    _tokenBackoffUntil[token.Id] = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
+                    _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group}) — backing off this token only", token.Symbol, groupKey);
                     return;
                 }
 
