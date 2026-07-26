@@ -31,6 +31,3 @@ Thumbs.db
 # Swap
 *.swp
 publish/
-
-# Admin panel — hardcoded creds, not ready to commit yet (see Program.cs)
-src/Onix.Scanner.Admin/

@@ -186,6 +186,7 @@ public sealed class SpreadEngineService : BackgroundService
                     using var scope = _scopeFactory.CreateScope();
                     var spreadRepo = scope.ServiceProvider.GetRequiredService<ISpreadTickRepository>();
                     await spreadRepo.WriteBatchAsync(batch, ct);
+                    Metrics.SpreadTicksWritten.Add(batch.Count);
                 }
                 catch (Exception ex)
                 {

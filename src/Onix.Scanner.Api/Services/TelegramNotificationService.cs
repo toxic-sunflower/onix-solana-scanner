@@ -178,9 +178,16 @@ public sealed class TelegramNotificationService : BackgroundService
                         if (dto.SpreadPct < sub.AlertThresholdPct)
                         {
                             // Rearm: once spread drops back below threshold, the next
-                            // crossing is allowed to signal immediately again.
+                            // crossing is allowed to signal immediately again. This is
+                            // also the "logout" moment (TODO.md "Логаут спред в боте") —
+                            // only notify if we'd actually signalled the crossing before
+                            // (sub.LastSignalAt set), not on every below-threshold tick.
                             if (!sub.IsArmed)
+                            {
                                 await userRepo.SetAlertStateAsync(sub.UserId, dto.Id, null, isArmed: true, stoppingToken);
+                                if (sub.LastSignalAt is not null)
+                                    await SendLogoutAsync(sub.ChatId, dto, stoppingToken);
+                            }
                             continue;
                         }
 
@@ -224,6 +231,14 @@ public sealed class TelegramNotificationService : BackgroundService
         else if (text.Equals("/status", StringComparison.OrdinalIgnoreCase))
         {
             await _bot!.SendMessage(chatId: chatId, text: _loc.Get(chatId, "bot_running"), cancellationToken: ct);
+        }
+        else if (text.Equals("/settings", StringComparison.OrdinalIgnoreCase))
+        {
+            await ShowSettings(chatId, fromId.Value, ct);
+        }
+        else if (text.Equals("/deleteaccount", StringComparison.OrdinalIgnoreCase))
+        {
+            await ShowDeleteConfirm(chatId, ct);
         }
         else
         {
@@ -308,6 +323,18 @@ public sealed class TelegramNotificationService : BackgroundService
             case "main_menu":
                 try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
                 await ShowMainMenu(chatId.Value, ct);
+                break;
+            case "toggle_notifications":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                await ToggleNotifications(chatId.Value, fromId, ct);
+                break;
+            case "delete_account_yes":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                await DeleteAccount(chatId.Value, fromId, ct);
+                break;
+            case "delete_account_no":
+                try { await _bot!.DeleteMessage(chatId.Value, query.Message!.MessageId, ct); } catch { }
+                await _bot!.SendMessage(chatId: chatId.Value, text: _loc.Get(chatId.Value, "delete_cancelled"), cancellationToken: ct);
                 break;
         }
     }
@@ -463,7 +490,93 @@ public sealed class TelegramNotificationService : BackgroundService
             replyMarkup: inlineKeyboard,
             cancellationToken: ct);
 
+        Onix.Scanner.Core.Metrics.TelegramSignalsSent.Add(1);
         _logger.LogInformation("Telegram signal sent: chat_id={ChatId} message_id={MessageId} symbol={Symbol} spread={Spread:F2}%",
             chatId, sent.MessageId, dto.Symbol, dto.SpreadPct);
+    }
+
+    private async Task SendLogoutAsync(long chatId, TokenCardDto dto, CancellationToken ct)
+    {
+        try
+        {
+            await _bot!.SendMessage(
+                chatId: chatId,
+                text: _loc.Get(chatId, "logout_title", ("symbol", dto.Symbol), ("spread", dto.SpreadPct.ToString("F2"))),
+                cancellationToken: ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to send Telegram logout notice for {Symbol}", dto.Symbol);
+        }
+    }
+
+    // ── /settings ──
+
+    private async Task ShowSettings(long chatId, long telegramId, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var settingsRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserSettingsRepository>();
+        var settings = await settingsRepo.GetByTelegramIdAsync(telegramId, ct);
+
+        var threshold = settings?.MinimalSpreadPct ?? 5m;
+        var cooldown = settings?.CooldownSeconds ?? 300;
+        var enabled = settings?.TelegramNotificationsEnabled ?? true;
+
+        var text = _loc.Get(chatId, "settings_menu",
+            ("threshold", threshold.ToString("0.##")),
+            ("cooldown", cooldown.ToString()),
+            ("status", _loc.Get(chatId, enabled ? "notif_on" : "notif_off")));
+
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: text,
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "settings_toggle_btn"), "toggle_notifications")],
+                [InlineKeyboardButton.WithUrl(_loc.Get(chatId, "settings_open_app_btn"), _appUrl)],
+                [InlineKeyboardButton.WithCallbackData("« " + _loc.Get(chatId, "main_menu"), "main_menu")],
+            ]),
+            cancellationToken: ct);
+    }
+
+    private async Task ToggleNotifications(long chatId, long telegramId, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var settingsRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserSettingsRepository>();
+        var settings = await settingsRepo.GetByTelegramIdAsync(telegramId, ct);
+        settings ??= new Onix.Scanner.Shared.Models.UserSettings { Id = Guid.NewGuid(), TelegramId = telegramId, CreatedAt = DateTime.UtcNow };
+
+        settings.TelegramNotificationsEnabled = !settings.TelegramNotificationsEnabled;
+        settings.UpdatedAt = DateTime.UtcNow;
+        await settingsRepo.UpsertAsync(settings, ct);
+
+        await ShowSettings(chatId, telegramId, ct);
+    }
+
+    // ── /deleteaccount ──
+
+    private async Task ShowDeleteConfirm(long chatId, CancellationToken ct)
+    {
+        await _bot!.SendMessage(
+            chatId: chatId,
+            text: _loc.Get(chatId, "delete_confirm"),
+            parseMode: ParseMode.Markdown,
+            replyMarkup: new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "delete_yes_btn"), "delete_account_yes")],
+                [InlineKeyboardButton.WithCallbackData(_loc.Get(chatId, "delete_no_btn"), "delete_account_no")],
+            ]),
+            cancellationToken: ct);
+    }
+
+    private async Task DeleteAccount(long chatId, long fromId, CancellationToken ct)
+    {
+        using var scope = _services.CreateScope();
+        var userRepo = scope.ServiceProvider.GetRequiredService<Core.Contracts.IUserRepository>();
+        var user = await userRepo.GetByTelegramIdAsync(fromId, ct);
+        if (user is not null)
+            await userRepo.DeleteAsync(user.Id, ct);
+
+        await _bot!.SendMessage(chatId: chatId, text: _loc.Get(chatId, "delete_done"), cancellationToken: ct);
+        _logger.LogInformation("Account deleted via Telegram bot for telegram_id={TelegramId}", fromId);
     }
 }

@@ -85,6 +85,7 @@ public sealed class JupiterWorkerService : BackgroundService
     private void LogFailureThrottled(Token token, string message, Exception? ex = null)
     {
         Interlocked.Increment(ref _erroredSinceSummary);
+        Metrics.JupiterQuoteError.Add(1);
         var now = DateTime.UtcNow;
         var last = _lastErrorLogAt.GetOrAdd(token.Id, DateTime.MinValue);
         if (now - last < ErrorLogThrottle) return;
@@ -239,6 +240,7 @@ public sealed class JupiterWorkerService : BackgroundService
         if (_tokenBackoffUntil.TryGetValue(token.Id, out var backoffUntil) && DateTime.UtcNow < backoffUntil)
         {
             Interlocked.Increment(ref _skippedBackoffSinceSummary);
+            Metrics.JupiterQuoteSkippedBackoff.Add(1);
             return;
         }
 
@@ -334,6 +336,7 @@ public sealed class JupiterWorkerService : BackgroundService
         if ((int)response.StatusCode == 429)
         {
             Interlocked.Increment(ref _rateLimitedSinceSummary);
+            Metrics.JupiterQuoteRateLimited.Add(1);
             _tokenBackoffUntil[token.Id] = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
             _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group}) — backing off this token only", token.Symbol, groupKey);
             return;
@@ -381,6 +384,7 @@ public sealed class JupiterWorkerService : BackgroundService
         snap.ProxyErrorUntilUtc = 0;
         Interlocked.Increment(ref snap.Sequence);
         Interlocked.Increment(ref _succeededSinceSummary);
+        Metrics.JupiterQuoteSuccess.Add(1);
         _tokenHealth[token.Id] = (token.Symbol, DateTime.UtcNow, latencyMs);
     }
 

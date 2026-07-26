@@ -53,6 +53,7 @@ public sealed class BingXConnectorService : BackgroundService
             {
                 _connected = false;
                 _reconnectCount++;
+                Metrics.BingxReconnects.Add(1);
                 _logger.LogError(ex, "BingX connector crashed (reconnect #{Count}). Reconnecting in {Delay}s",
                     _reconnectCount, backoff.TotalSeconds);
                 await Task.Delay(backoff, stoppingToken);

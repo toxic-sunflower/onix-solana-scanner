@@ -50,3 +50,32 @@ services:
       retries: 5
       start_period: 60s
     restart: unless-stopped
+
+  # Internal Blazor Server admin panel — single instance (no blue/green, brief
+  # restart on deploy is fine for an internal tool). Login has no 2FA, only a
+  # rate limit — so unlike app_blue/app_green (which rely on the server
+  # firewall blocking 5000/5001 externally, with nginx as the only public
+  # door), this one binds to 127.0.0.1 only, not 0.0.0.0. With
+  # network_mode: host that means the port never appears on the server's
+  # public interface at all — no firewall rule required, reachable only via
+  # SSH tunnel (`ssh -L 5050:127.0.0.1:5050 app@server`) or from the box itself.
+  admin:
+    build:
+      context: .
+      dockerfile: src/Onix.Scanner.Admin/Dockerfile
+    container_name: onix_admin
+    network_mode: host
+    env_file: .env
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://127.0.0.1:5050
+      - Admin__Username=${ADMIN_USERNAME}
+      - Admin__Password=${ADMIN_PASSWORD}
+      - Encryption__Key=${ENCRYPTION_KEY}
+      - ConnectionStrings__Default=Host=localhost;Database=onix_scanner;Username=onix;Password=${DB_PASSWORD}
+    healthcheck:
+      test: curl -f http://127.0.0.1:5050/login || exit 1
+      interval: 15s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped

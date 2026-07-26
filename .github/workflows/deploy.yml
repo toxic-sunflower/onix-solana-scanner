@@ -20,7 +20,7 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: app
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD,APP_URL,TELEGRAM_OAUTH_CLIENT_ID,TELEGRAM_OAUTH_CLIENT_SECRET,TELEGRAM_OAUTH_REDIRECT_URI,TELEGRAM_WEBHOOK_SECRET
+          envs: REPO_URL,TELEGRAM_BOT_TOKEN,ENCRYPTION_KEY,DB_PASSWORD,APP_URL,TELEGRAM_OAUTH_CLIENT_ID,TELEGRAM_OAUTH_CLIENT_SECRET,TELEGRAM_OAUTH_REDIRECT_URI,TELEGRAM_WEBHOOK_SECRET,ADMIN_USERNAME,ADMIN_PASSWORD
           script: |
             set -e
             if [ ! -d /home/app/onix ]; then
@@ -39,6 +39,8 @@ jobs:
             TELEGRAM_OAUTH_CLIENT_SECRET=$TELEGRAM_OAUTH_CLIENT_SECRET
             TELEGRAM_OAUTH_REDIRECT_URI=$TELEGRAM_OAUTH_REDIRECT_URI
             TELEGRAM_WEBHOOK_SECRET=$TELEGRAM_WEBHOOK_SECRET
+            ADMIN_USERNAME=$ADMIN_USERNAME
+            ADMIN_PASSWORD=$ADMIN_PASSWORD
             EOF
 
             ACTIVE_FILE=/home/app/onix/.active_color
@@ -102,6 +104,21 @@ jobs:
               docker rm onix-app-1 2>/dev/null || true
             fi
 
+            echo "Deploying admin panel (single instance, brief restart is fine — internal tool, not on the public blue/green path)..."
+            docker compose build admin
+            docker compose up -d admin
+            admin_healthy=false
+            for i in $(seq 1 20); do
+              status=$(docker inspect --format='{{.State.Health.Status}}' onix_admin 2>/dev/null || echo "starting")
+              if [ "$status" = "healthy" ]; then admin_healthy=true; break; fi
+              if [ "$status" = "unhealthy" ]; then break; fi
+              sleep 5
+            done
+            if [ "$admin_healthy" != "true" ]; then
+              echo "Admin panel never became healthy — check logs, but this does NOT fail the deploy (public app is unaffected)."
+              docker compose logs --tail=100 admin
+            fi
+
             echo "Deploy complete."
         env:
           REPO_URL: https://github.com/${{ github.repository }}.git
@@ -113,3 +130,5 @@ jobs:
           TELEGRAM_OAUTH_CLIENT_SECRET: ${{ secrets.TELEGRAM_OAUTH_CLIENT_SECRET }}
           TELEGRAM_OAUTH_REDIRECT_URI: ${{ secrets.TELEGRAM_OAUTH_REDIRECT_URI }}
           TELEGRAM_WEBHOOK_SECRET: ${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          ADMIN_USERNAME: ${{ secrets.ADMIN_USERNAME }}
+          ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}

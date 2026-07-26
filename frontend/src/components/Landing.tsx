@@ -30,6 +30,10 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
   const [config, setConfig] = useState<OAuthConfig | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [recoveryError, setRecoveryError] = useState('');
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/v1/config')
@@ -118,6 +122,31 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
     window.location.href = url.toString();
   };
 
+  const submitRecovery = async () => {
+    if (!recoveryCode.trim()) return;
+    setRecoveryLoading(true);
+    setRecoveryError('');
+    try {
+      const res = await fetch('/api/v1/auth/backup-codes/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: recoveryCode.trim() }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        localStorage.setItem('auth_token', data.token);
+        localStorage.setItem('refresh_token', data.refreshToken);
+        onToken(data.token);
+      } else {
+        setRecoveryError(data.error === 'invalid_code' ? 'Invalid or already-used code' : 'Recovery failed');
+      }
+    } catch {
+      setRecoveryError('Network error');
+    } finally {
+      setRecoveryLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4">
       <div className="max-w-md text-center">
@@ -144,6 +173,36 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
         <p className="text-gray-500 text-sm mt-4">
           Log in with Telegram to access the dashboard
         </p>
+
+        <button
+          onClick={() => setShowRecovery(s => !s)}
+          className="text-gray-500 hover:text-gray-300 text-xs mt-6 underline cursor-pointer"
+        >
+          Lost access to Telegram?
+        </button>
+
+        {showRecovery && (
+          <div className="mt-3 flex flex-col gap-2 items-stretch">
+            <input
+              type="text"
+              value={recoveryCode}
+              onChange={e => setRecoveryCode(e.target.value)}
+              placeholder="Recovery code (XXXXX-XXXXX)"
+              className="px-3 py-2 bg-[#16171d] border border-[#2a2b36] rounded text-sm text-[#f1f5f9] text-center focus:outline-none focus:border-[#f59e0b]"
+            />
+            <button
+              onClick={submitRecovery}
+              disabled={recoveryLoading}
+              className="px-4 py-2 bg-[#2a2b36] text-[#94a3b8] rounded text-sm hover:bg-[#3a3b48] transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {recoveryLoading ? 'Checking...' : 'Log in with recovery code'}
+            </button>
+            {recoveryError && <p className="text-red-400 text-xs">{recoveryError}</p>}
+            <p className="text-gray-500 text-xs">
+              Recovery codes are generated in Settings while logged in — each one works once.
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

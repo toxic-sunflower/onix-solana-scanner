@@ -42,11 +42,23 @@ public class UserRepository : IUserRepository
     public async Task DeleteAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
-        if (user is not null)
-        {
-            _db.Users.Remove(user);
-            await _db.SaveChangesAsync(ct);
-        }
+        if (user is null) return;
+
+        // No FK constraints tie these tables to users.id, so a plain
+        // Users.Remove would silently orphan them — "удалить аккаунт и все
+        // данные" (TODO.md) means actually cleaning these up, not just the
+        // row the user themselves see.
+        await _db.UserTokens.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        await _db.BlacklistedTokens.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        await _db.UserPreferences.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        await _db.RefreshTokens.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        await _db.BlacklistedJtis.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        await _db.BackupCodes.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        if (user.TelegramId != 0)
+            await _db.UserSettings.Where(x => x.TelegramId == user.TelegramId).ExecuteDeleteAsync(ct);
+
+        _db.Users.Remove(user);
+        await _db.SaveChangesAsync(ct);
     }
 
     public async Task UpdateChatIdAsync(Guid userId, long chatId, CancellationToken ct = default)
@@ -194,4 +206,22 @@ public class UserRepository : IUserRepository
             .Where(u => userIds.Contains(u.Id) && u.Role != UserRole.Admin && !u.HasPaidAccess)
             .ExecuteUpdateAsync(u => u.SetProperty(x => x.DemoSecondsUsed, x => x.DemoSecondsUsed + seconds), ct);
     }
+
+    public async Task ReplaceBackupCodesAsync(Guid userId, List<string> codeHashes, CancellationToken ct = default)
+    {
+        await _db.BackupCodes.Where(x => x.UserId == userId).ExecuteDeleteAsync(ct);
+        _db.BackupCodes.AddRange(codeHashes.Select(h => new BackupCode { UserId = userId, CodeHash = h }));
+        await _db.SaveChangesAsync(ct);
+    }
+
+    public Task<BackupCode?> GetByCodeHashAsync(string codeHash, CancellationToken ct = default) =>
+        _db.BackupCodes.FirstOrDefaultAsync(x => x.CodeHash == codeHash, ct);
+
+    public async Task ConsumeBackupCodeAsync(Guid codeId, CancellationToken ct = default)
+    {
+        await _db.BackupCodes.Where(x => x.Id == codeId).ExecuteDeleteAsync(ct);
+    }
+
+    public Task<int> GetBackupCodeCountAsync(Guid userId, CancellationToken ct = default) =>
+        _db.BackupCodes.CountAsync(x => x.UserId == userId, ct);
 }

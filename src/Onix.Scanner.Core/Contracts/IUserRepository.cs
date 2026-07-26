@@ -30,6 +30,10 @@ public interface IUserRepository
     Task CleanupExpiredBlacklistedJtisAsync(CancellationToken ct = default);
     Task<DemoStatus?> GetDemoStatusAsync(Guid userId, CancellationToken ct = default);
     Task IncrementDemoSecondsAsync(IReadOnlyCollection<Guid> userIds, int seconds, CancellationToken ct = default);
+    Task ReplaceBackupCodesAsync(Guid userId, List<string> codeHashes, CancellationToken ct = default);
+    Task<BackupCode?> GetByCodeHashAsync(string codeHash, CancellationToken ct = default);
+    Task ConsumeBackupCodeAsync(Guid codeId, CancellationToken ct = default);
+    Task<int> GetBackupCodeCountAsync(Guid userId, CancellationToken ct = default);
 }
 
 public record DemoStatus(int DemoSecondsUsed, bool HasPaidAccess);

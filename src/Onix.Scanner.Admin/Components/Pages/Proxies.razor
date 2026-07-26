@@ -1,0 +1,198 @@
+@page "/proxies"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Onix.Scanner.Core
+@using Onix.Scanner.Core.Contracts
+@using Onix.Scanner.Infrastructure.Data
+@using Onix.Scanner.Shared.Models
+@inject IProxyRepository ProxyRepo
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ILogger<Proxies> Logger
+
+<PageTitle>Proxies</PageTitle>
+
+<h1>Proxies</h1>
+<p class="text-muted">
+    TZ п.8.2/8.3 — assign, strict/fallback, test, credentials. Пароли хранятся зашифрованными
+    (AES) через тот же ProxyRepository, что использует основной API.
+</p>
+
+<div class="mb-3">
+    <button class="btn btn-sm btn-secondary" @onclick="LoadAsync">Обновить</button>
+    <button class="btn btn-sm btn-primary" @onclick="() => _showAddForm = !_showAddForm">
+        @(_showAddForm ? "Отмена" : "Добавить прокси")
+    </button>
+</div>
+
+@if (_showAddForm)
+{
+    <div class="card p-3 mb-3" style="max-width:480px;">
+        <div class="mb-2">
+            <label class="form-label">Type</label>
+            <select class="form-select" @bind="_newType">
+                <option value="HTTP">HTTP</option>
+                <option value="SOCKS5">SOCKS5</option>
+            </select>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Host</label>
+            <input class="form-control" @bind="_newHost" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Port</label>
+            <input class="form-control" type="number" @bind="_newPort" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Username (опционально)</label>
+            <input class="form-control" @bind="_newUsername" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Password (опционально)</label>
+            <input class="form-control" type="password" @bind="_newPassword" />
+        </div>
+        @if (!string.IsNullOrEmpty(_addError))
+        {
+            <p class="text-danger">@_addError</p>
+        }
+        <button class="btn btn-success" @onclick="AddProxy">Создать</button>
+    </div>
+}
+
+@if (_proxies is null)
+{
+    <p><em>Загрузка…</em></p>
+}
+else
+{
+    <table class="table table-sm table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Host</th>
+                <th>Type</th>
+                <th>Enabled</th>
+                <th>Status</th>
+                <th>Latency</th>
+                <th>Last check</th>
+                <th>Tokens using it</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var p in _proxies)
+            {
+                <tr>
+                    <td>@p.Host:@p.Port</td>
+                    <td>@p.Type</td>
+                    <td>
+                        <input type="checkbox" checked="@p.Enabled" @onchange="@(e => ToggleEnabled(p, (bool)e.Value!))" />
+                    </td>
+                    <td>@StatusBadge(p.Status)</td>
+                    <td>@(p.LatencyMs is null ? "—" : $"{p.LatencyMs}ms")</td>
+                    <td>@(p.LastCheckAt is null ? "never" : $"{(DateTime.UtcNow - p.LastCheckAt.Value).TotalMinutes:F0}m ago")</td>
+                    <td>@_assignedCounts.GetValueOrDefault(p.Id, 0)</td>
+                    <td class="text-nowrap">
+                        <button class="btn btn-sm btn-outline-primary" disabled="@(_testingId == p.Id)" @onclick="() => TestProxy(p)">
+                            @(_testingId == p.Id ? "Testing…" : "Test")
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteProxy(p)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Proxy>? _proxies;
+    private Dictionary<Guid, int> _assignedCounts = new();
+    private Guid? _testingId;
+
+    private bool _showAddForm;
+    private string _newType = "HTTP";
+    private string _newHost = "";
+    private int _newPort = 1080;
+    private string _newUsername = "";
+    private string _newPassword = "";
+    private string? _addError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _proxies = await ProxyRepo.GetAllAsync();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _assignedCounts = await db.Tokens
+            .Where(t => t.ProxyId != null)
+            .GroupBy(t => t.ProxyId!.Value)
+            .Select(g => new { ProxyId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ProxyId, x => x.Count);
+    }
+
+    private async Task AddProxy()
+    {
+        _addError = null;
+        if (string.IsNullOrWhiteSpace(_newHost) || _newPort <= 0)
+        {
+            _addError = "Host и Port обязательны.";
+            return;
+        }
+
+        await ProxyRepo.CreateAsync(new Proxy
+        {
+            Type = _newType,
+            Host = _newHost,
+            Port = _newPort,
+            Username = string.IsNullOrWhiteSpace(_newUsername) ? null : _newUsername,
+            Password = string.IsNullOrWhiteSpace(_newPassword) ? null : _newPassword,
+            Enabled = true,
+        });
+        Logger.LogInformation("Admin created proxy {Host}:{Port}", _newHost, _newPort);
+
+        _showAddForm = false;
+        _newHost = ""; _newPort = 1080; _newUsername = ""; _newPassword = ""; _newType = "HTTP";
+        await LoadAsync();
+    }
+
+    private async Task ToggleEnabled(Proxy p, bool value)
+    {
+        p.Enabled = value;
+        await ProxyRepo.UpdateAsync(p);
+        await LoadAsync();
+    }
+
+    private async Task TestProxy(Proxy p)
+    {
+        _testingId = p.Id;
+        try
+        {
+            var result = await ProxyTester.TestAsync(p, CancellationToken.None);
+            p.Status = result.Success ? Onix.Scanner.Shared.ProxyStatus.Active : Onix.Scanner.Shared.ProxyStatus.Failed;
+            p.LatencyMs = result.LatencyMs;
+            p.LastCheckAt = DateTime.UtcNow;
+            await ProxyRepo.UpdateAsync(p);
+            Logger.LogInformation("Proxy test {Host}:{Port} -> {Status} ({LatencyMs}ms) {Error}",
+                p.Host, p.Port, p.Status, p.LatencyMs, result.Error);
+        }
+        finally
+        {
+            _testingId = null;
+            await LoadAsync();
+        }
+    }
+
+    private async Task DeleteProxy(Proxy p)
+    {
+        await ProxyRepo.DeleteAsync(p.Id);
+        Logger.LogInformation("Admin deleted proxy {Host}:{Port}", p.Host, p.Port);
+        await LoadAsync();
+    }
+
+    private static string StatusBadge(Onix.Scanner.Shared.ProxyStatus status) => status switch
+    {
+        Onix.Scanner.Shared.ProxyStatus.Active => "🟢 Active",
+        Onix.Scanner.Shared.ProxyStatus.Failed => "🔴 Failed",
+        Onix.Scanner.Shared.ProxyStatus.Slow => "🟡 Slow",
+        _ => "⚪ Disabled",
+    };
+}

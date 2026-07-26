@@ -13,39 +13,84 @@
 
 ## Среднее
 
-- [ ] **Метрики** — Prometheus/OpenTelemetry (ТЗ п.19.2). Отдельная большая
-      задача (выбор библиотеки, инструментирование каждого сервиса,
-      `/metrics` эндпоинт) — сознательно отложена, не делалась в этом заходе.
 - [ ] **Telegram bot token не шифруется** — берётся из конфигурации/env в
       открытом виде. Ожидаемо для серверного секрета вне БД, но стоит явно
       зафиксировать как решение, а не пробел.
 
-## Продуктовые фичи (не начато)
-
-### Telegram Bot
-- [ ] **Логаут спред в боте** — уведомление при logout-спреде (CEX цена уходит
-      за границы DEX).
-- [ ] **Настройки уведомлений** — выбор токенов для мониторинга, пороги
-      спреда, кастомные торговые пары.
-- [ ] **Удалить аккаунт из бота** — кнопка удаления данных пользователя без
-      входа в Mini App.
-
-### Mini App / UI
-- [ ] **Настройки** — страница управления профилем: язык, тема, уведомления.
-- [ ] **Внешний вид** — кастомизация темы (светлая/тёмная), настройка колонок
-      на dashboard.
-- [ ] **Удалить аккаунт** — кнопка полного удаления аккаунта и всех данных.
+## Продуктовые фичи
 
 ### Security & Recovery
-- [ ] **Что если потерял Telegram?** — восстановление доступа через
-      резервные коды/email при регистрации.
 - [ ] **Fallback-доступ к админке** — резервный email + TOTP, exclude-коды,
-      доверенные устройства (по аналогии с платёжными системами). Актуально
-      теперь, когда админка (`Onix.Scanner.Admin`) реально существует —
-      см. примечание в "Сделано".
+      доверенные устройства (по аналогии с платёжными системами).
+      **Сознательно отложено, не забыто**: логин/пароль `Onix.Scanner.Admin`
+      теперь берутся из `ADMIN_USERNAME`/`ADMIN_PASSWORD` (env/GitHub Secrets,
+      см. "Сделано" ниже) — это уже не временная заглушка, решение принято
+      осознанно (см. пункт про Telegram bot token выше — тот же принцип:
+      простой секрет вне БД, а не пробел). TOTP/email/доверенные устройства
+      сверху — по-прежнему отдельная задача на будущее, не блокер прямо
+      сейчас.
 
 ## Сделано
 
+- [x] **Метрики** (ТЗ п.19.2) — OpenTelemetry + Prometheus exporter,
+      `/metrics` эндпоинт (`Program.cs`, `AddOpenTelemetry().WithMetrics(...)`).
+      Не проксируется через `frontend/nginx.conf` (только `/api/` и `/hubs/`),
+      значит наружу не торчит — Prometheus скрейпит напрямую по имени
+      контейнера внутри docker-compose сети. Кастомные счётчики
+      (`Onix.Scanner.Core.Metrics`): Jupiter success/rate-limited/error/
+      skipped-backoff, BingX reconnects, Telegram signals sent, spread ticks
+      written — плюс стандартная ASP.NET Core/HttpClient/Runtime
+      инструментация из коробки. Пакет экспортера
+      (`OpenTelemetry.Exporter.Prometheus.AspNetCore`) на момент установки
+      доступен только как `-beta.1` (1.17.0-beta.1) — так у OTel давно и
+      везде, включая прод-использование, не блокер.
+- [x] **Логаут спред в боте.** `TelegramNotificationService.ProcessAlertsAsync`
+      — при rearm (спред падает обратно ниже порога) отправляется сообщение
+      `logout_title`, но только если до этого реально было отправлено
+      сигнальное сообщение (`sub.LastSignalAt != null`), а не на каждый тик
+      ниже порога.
+- [x] **Настройки уведомлений в боте.** Команда `/settings` — показывает
+      текущий порог/cooldown/статус уведомлений, кнопка-тумблер
+      `toggle_notifications` (пишет в `UserSettings` напрямую), кнопка
+      "Open full settings" на полный Mini App (выбор токенов/кастомных пар
+      там уже есть — не дублировали отдельным чат-флоу).
+- [x] **Удалить аккаунт из бота.** Команда `/deleteaccount` — inline
+      confirm/cancel, вызывает существующий `IUserRepository.DeleteAsync`
+      напрямую (без похода в Mini App).
+- [x] **Настройки (Mini App) — язык.** `PATCH /api/v1/auth/me`
+      (`{language}`), персистится на `User.Language`, используется и ботом
+      (`_loc.SetLanguage`). Тема/уведомления — уведомления уже были в
+      Settings Page (порог/cooldown/telegram toggle), тема — см. пункт ниже.
+- [x] **Удалить аккаунт (Mini App).** `DELETE /api/v1/auth/me` +
+      confirm-diалог в `Settings.tsx`. `UserRepository.DeleteAsync` теперь
+      реально чистит **все** связанные таблицы (`UserTokens`,
+      `BlacklistedTokens`, `UserPreferences`, `RefreshTokens`,
+      `BlacklistedJtis`, `BackupCodes`, `UserSettings`) — раньше удалялась
+      только строка `Users`, остальное осиротевало молча (в БД не было ни
+      одного FK на `users.id`, так что это не бросалось ошибкой, просто
+      копилось мусором).
+- [x] **Внешний вид — настройка колонок на dashboard** (частично, см. ниже).
+      `Dashboard.tsx` — кнопка "⚙ Columns", чекбоксы show/hide для
+      имени токена, mint-адреса, ссылок на биржи, recent log — персистится в
+      `localStorage`. **Полная кастомизация темы (светлая/тёмная) сознательно
+      не сделана** — это отдельный, большой рефакторинг: весь фронтенд
+      захардкожен на конкретные hex-цвета (`bg-[#16171d]` и т.п.) в каждом
+      компоненте, не через CSS-переменные/Tailwind dark-strategy. Переделка
+      под настоящую тему — самостоятельная задача, а не довесок к этому
+      заходу; выполнена только часть про колонки, о чём явно пишу здесь, а не
+      молчу.
+- [x] **Что если потерял Telegram?** — резервные коды. `BackupCode`
+      (новая таблица, `CodeHash` уникальный индекс, single-use — при
+      успешном логине запись удаляется, отдельного флага `Used` не нужно).
+      `POST /api/v1/auth/backup-codes/generate` (10 кодов, plaintext
+      возвращается один раз, хранится только SHA-256), `GET .../count`,
+      `POST /api/v1/auth/backup-codes/login` (`AllowAnonymous`, алтернативный
+      логин без Telegram). Фронтенд: генерация/просмотр в `Settings.tsx`,
+      форма восстановления на `Landing.tsx` ("Lost access to Telegram?").
+      Email как альтернативный канал сознательно не делался — в приложении
+      сейчас вообще нет сбора email ни для одного пользователя, добавление
+      email потребовало бы SMTP/верификации — отдельная задача больше по
+      объёму, чем сами коды.
 - [x] BingX WebSocket — Ask 1, depth10@100ms, ping-pong, reconnect
 - [x] Jupiter Price API v3 → Quote API (`Buy Price = inAmount / outAmount`,
       учёт `Token.JupiterInputDecimals`, `TokenQuoteAmount.QuoteAmount`)
@@ -186,7 +231,7 @@
       Jupiter-воркера.
 - [x] **Админка (`Onix.Scanner.Admin`, Blazor Server).** Реально
       существует и работает, проверено локально (Docker Postgres + два
-      `dotnet run`): логин по хардкод-паролю (cookie-auth), страница
+      `dotnet run`): логин по паролю (cookie-auth), страница
       Tokens (Mapping Required confirm/reject, enable-toggle, proxy
       assignment, fallback policy, quote amount, ручное
       добавление/удаление, диагностика ticks/1h из БД напрямую), страница
@@ -194,6 +239,36 @@
       `IProxyRepository`/`AesEncryptionService`, что и основной API),
       страница Settings (read-only обзор Jupiter/BingX/Freshness/Telegram/
       Storage — большинство значений заданы в коде/env осознанно, не
-      DB-backed рантайм-конфиг). **Не закоммичено** — логин/пароль
-      захардкожены (`Program.cs`), проект в `.gitignore`
-      (`src/Onix.Scanner.Admin/`) до переноса credentials в env/секреты.
+      DB-backed рантайм-конфиг). Добавлен в `Onix.Scanner.slnx`.
+- [x] **Логин админки — env/GitHub Secrets вместо хардкода.**
+      `Onix.Scanner.Admin/Program.cs` больше не содержит пароль в исходниках
+      — `ADMIN_USERNAME`/`ADMIN_PASSWORD` читаются из конфига (тот же
+      `.env`-парсинг, что и в основном Api `Program.cs`, маппится в
+      `Admin:Username`/`Admin:Password`; в проде — те же имена через GitHub
+      Secrets, по аналогии с `TELEGRAM_BOT_TOKEN`/`ENCRYPTION_KEY` в
+      `deploy.yml`). Сравнение логина/пароля через
+      `CryptographicOperations.FixedTimeEquals` (не `==`) — защита от
+      timing-атаки на подбор пароля посимвольно. Раз хардкода в исходниках
+      больше нет, `src/Onix.Scanner.Admin/` убран из `.gitignore` — можно
+      коммитить. **Что нужно сделать вручную (я не могу — нет `gh` CLI в
+      этом окружении)**: добавить в GitHub repo secrets `ADMIN_USERNAME` и
+      `ADMIN_PASSWORD` (значения — см. чат, пароль сгенерирован). Локально
+      уже лежат в `.env` (не в git).
+- [x] **Админка подключена к деплою (код/конфиг).** `src/Onix.Scanner.Admin/
+      Dockerfile` (без npm-стадии — Blazor Server, серверный рендеринг,
+      отдельная сборка фронтенда не нужна). `docker-compose.yml` — новый
+      сервис `admin`, отдельный от blue/green (внутренний инструмент,
+      короткий рестарт при деплое не страшен), порт 5050, те же
+      `Admin__Username`/`Admin__Password`/`Encryption__Key`/
+      `ConnectionStrings__Default`, что и у `app_blue`/`app_green`.
+      `deploy.yml` — билдит и рестартит `admin` после blue/green-свитча
+      основного приложения; если healthcheck админки не прошёл, это **не**
+      роняет весь деплой (публичное приложение не затронуто), только пишет
+      логи в вывод экшена. `ADMIN_USERNAME`/`ADMIN_PASSWORD` добавлены в
+      список `envs:`/`env:` в `deploy.yml` рядом с остальными секретами.
+      Rate-limit на логин (5 попыток/мин на IP, `RequireRateLimiting("login")`)
+      — единственная защита от подбора пароля на сейчас, не замена 2FA/
+      файрволу. `ADMIN_USERNAME`/`ADMIN_PASSWORD` добавлены в GitHub repo
+      secrets (сделано вручную). **Открытый блокер — см. "Критическое"
+      выше**: порт 5050 всё ещё не закрыт файрволом на сервере, это
+      инфраструктурная настройка вне репозитория, я её сделать не могу.

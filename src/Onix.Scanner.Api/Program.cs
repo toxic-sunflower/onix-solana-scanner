@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Npgsql;
+using OpenTelemetry.Metrics;
+using OpenTelemetry.Resources;
 using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Core;
@@ -168,6 +170,20 @@ builder.Services.AddHostedService<TokenSyncService>();
 builder.Services.AddHostedService<AggregationService>();
 builder.Services.AddHostedService<RetentionService>();
 
+// TZ 19.2 — Prometheus scrape endpoint at /metrics, not routed through the
+// frontend's nginx (frontend/nginx.conf only forwards /api/ and /hubs/), so
+// it's only reachable directly against this container's port on the
+// docker-compose network — a Prometheus instance on the same network scrapes
+// it there, it's never exposed publicly.
+builder.Services.AddOpenTelemetry()
+    .ConfigureResource(r => r.AddService("onix-scanner-api"))
+    .WithMetrics(metrics => metrics
+        .AddMeter(Metrics.MeterName)
+        .AddAspNetCoreInstrumentation()
+        .AddHttpClientInstrumentation()
+        .AddRuntimeInstrumentation()
+        .AddPrometheusExporter());
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -178,6 +194,8 @@ if (app.Environment.IsDevelopment())
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.MapPrometheusScrapingEndpoint();
 
 app.UseDefaultFiles();
 app.UseStaticFiles();

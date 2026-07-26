@@ -17,12 +17,19 @@ interface Props {
    * actually matches what the user configured instead of a hardcoded
    * server-side constant nobody could see or control. */
   alertThreshold?: number;
+  /** Dashboard column visibility (TODO.md "Внешний вид — настройка колонок
+   * на dashboard"), persisted client-side. All default to visible. */
+  columns?: { name?: boolean; mint?: boolean; links?: boolean; recentLog?: boolean };
 }
 
 export default function TokenCard({
   token, flash, ticks, onClickChart, onClickHistory,
-  isPinned, onPin, isFavorite, onFavorite, onBlacklist, alertThreshold,
+  isPinned, onPin, isFavorite, onFavorite, onBlacklist, alertThreshold, columns,
 }: Props) {
+  const showName = columns?.name ?? true;
+  const showMint = columns?.mint ?? true;
+  const showLinks = columns?.links ?? true;
+  const showRecentLog = columns?.recentLog ?? true;
   const hasBingx = (token.bingxAskPrice ?? 0) > 0;
   const hasJupiter = (token.jupiterBuyPrice ?? 0) > 0;
   const hasBoth = hasBingx && hasJupiter;
@@ -53,8 +60,8 @@ export default function TokenCard({
           <span className={`w-2.5 h-2.5 rounded-full ${hasBoth ? 'bg-[#22c55e]' : hasBingx || hasJupiter ? 'bg-[#f59e0b] shimmer' : 'bg-[#64748b]'}`} />
           {isAlerting && <span title={`Spread >= ${alertThreshold}% (your alert threshold)`}>🚨</span>}
           <span className="font-bold text-base text-[#f1f5f9]">{token.symbol}</span>
-          {token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
-          {token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline">{token.solanaMint}</span>}
+          {showName && token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
+          {showMint && token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline">{token.solanaMint}</span>}
         </div>
         <div className="flex items-center gap-2">
           {onBlacklist && (
@@ -107,15 +114,15 @@ export default function TokenCard({
       </div>
 
       <div className="flex gap-1.5 mt-0.5 items-center">
-        {token.bingxUrl && (
+        {showLinks && token.bingxUrl && (
           <a href={token.bingxUrl} target="_blank" rel="noreferrer"
             className="text-xs px-2 py-1 rounded bg-[#1e1f28] text-[#94a3b8] hover:text-[#f59e0b] hover:bg-[#2a2b36] transition-colors">BingX</a>
         )}
-        {token.jupiterUrl && (
+        {showLinks && token.jupiterUrl && (
           <a href={token.jupiterUrl} target="_blank" rel="noreferrer"
             className="text-xs px-2 py-1 rounded bg-[#1e1f28] text-[#94a3b8] hover:text-[#f59e0b] hover:bg-[#2a2b36] transition-colors">Jupiter</a>
         )}
-        {token.solscanUrl && (
+        {showLinks && token.solscanUrl && (
           <a href={token.solscanUrl} target="_blank" rel="noreferrer"
             className="text-xs px-2 py-1 rounded bg-[#1e1f28] text-[#94a3b8] hover:text-[#f59e0b] hover:bg-[#2a2b36] transition-colors">Contract</a>
         )}
@@ -126,7 +133,7 @@ export default function TokenCard({
           className="text-xs px-2 py-1 rounded bg-[#d97706] text-black font-medium hover:bg-[#b45309] transition-colors">Chart</button>
       </div>
 
-      {recentLog.length > 0 && (
+      {showRecentLog && recentLog.length > 0 && (
         <details className="bg-[#1a1b24] rounded px-2.5 py-1.5 mt-0.5 group">
           <summary className="text-[10px] text-[#475569] cursor-pointer hover:text-[#64748b] list-none flex items-center gap-1 select-none">
             <span className="text-[#475569] group-open:rotate-90 transition-transform">▶</span>

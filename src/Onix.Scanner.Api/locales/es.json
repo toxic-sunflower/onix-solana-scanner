@@ -14,5 +14,19 @@
   "signal_profit": "💰 Ganancia: {spread}%",
   "signal_bingx": "💵 BINGX: ${price}",
   "signal_jupiter": "💵 Jupiter: ${price}",
-  "signal_contract": "📋 Contrato: {id}"
+  "signal_contract": "📋 Contrato: {id}",
+
+  "logout_title": "✅ {symbol}  spread de vuelta a {spread}% (bajo tu umbral)",
+
+  "settings_menu": "⚙️ *Ajustes*\n\nUmbral de spread: {threshold}%\nCooldown: {cooldown}s\nNotificaciones: {status}",
+  "settings_toggle_btn": "🔔 Cambiar notificaciones",
+  "settings_open_app_btn": "Abrir todos los ajustes",
+  "notif_on": "ACTIVADO",
+  "notif_off": "DESACTIVADO",
+
+  "delete_confirm": "⚠️ ¿Eliminar tu cuenta y *todos* tus datos (favoritos, lista negra, ajustes de alertas, sesiones)? Esto no se puede deshacer.",
+  "delete_yes_btn": "Sí, eliminar todo",
+  "delete_no_btn": "Cancelar",
+  "delete_cancelled": "Cancelado — tu cuenta no fue modificada.",
+  "delete_done": "Tu cuenta y todos los datos asociados han sido eliminados."
 }

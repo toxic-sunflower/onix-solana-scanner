@@ -1,0 +1,294 @@
+@page "/"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Onix.Scanner.Core.Contracts
+@using Onix.Scanner.Infrastructure.Data
+@using Onix.Scanner.Shared
+@using Onix.Scanner.Shared.Models
+@inject IDbContextFactory<AppDbContext> DbFactory
+@inject ITokenRepository TokenRepo
+@inject ILogger<Tokens> Logger
+
+<PageTitle>Tokens</PageTitle>
+
+<h1>Tokens</h1>
+
+@if (_pending is { Count: > 0 })
+{
+    <div class="alert alert-warning">
+        <strong>@_pending.Count токен(ов) требуют подтверждения (Mapping Required)</strong> —
+        совпадение по тикеру между Jupiter и BingX не проверено, могут быть разные проекты
+        (см. инцидент AVA: CEX $0.16 vs DEX $0.008 — совпал только тикер).
+    </div>
+    <table class="table table-sm table-bordered mb-4">
+        <thead><tr><th>Symbol</th><th>Name</th><th>Mint</th><th>BingX</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var t in _pending)
+            {
+                <tr>
+                    <td><strong>@t.Symbol</strong></td>
+                    <td>@t.Name</td>
+                    <td class="text-truncate" style="max-width:260px">
+                        <a href="https://solscan.io/token/@t.SolanaMint" target="_blank">@t.SolanaMint</a>
+                    </td>
+                    <td><a href="@t.BingxUrl" target="_blank">@t.BingxSymbol</a></td>
+                    <td class="text-nowrap">
+                        <button class="btn btn-sm btn-success" @onclick="() => ConfirmMapping(t)">Confirm</button>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RejectMapping(t)">Reject</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<p class="text-muted">Ticks (1h) считается напрямую по spread_ticks.</p>
+
+<div class="mb-3">
+    <button class="btn btn-sm btn-secondary" @onclick="LoadAsync">Обновить</button>
+    <button class="btn btn-sm btn-primary" @onclick="() => _showAddForm = !_showAddForm">
+        @(_showAddForm ? "Отмена" : "Добавить токен вручную")
+    </button>
+</div>
+
+@if (_showAddForm)
+{
+    <div class="card p-3 mb-3" style="max-width:480px;">
+        <div class="mb-2">
+            <label class="form-label">Symbol</label>
+            <input class="form-control" @bind="_newSymbol" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Solana Mint Address</label>
+            <input class="form-control" @bind="_newMint" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">BingX Symbol (например BTC-USDT)</label>
+            <input class="form-control" @bind="_newBingxSymbol" />
+        </div>
+        @if (!string.IsNullOrEmpty(_addError))
+        {
+            <p class="text-danger">@_addError</p>
+        }
+        <button class="btn btn-success" @onclick="AddToken">Создать (сразу подтверждённый)</button>
+    </div>
+}
+
+@if (_all is null)
+{
+    <p><em>Загрузка…</em></p>
+}
+else
+{
+    <table class="table table-sm table-striped table-hover">
+        <thead>
+            <tr>
+                <th>Symbol</th>
+                <th>Name</th>
+                <th>Enabled</th>
+                <th>CEX</th>
+                <th>Proxy</th>
+                <th>Fallback policy</th>
+                <th>Quote amount</th>
+                <th>Ticks (1h)</th>
+                <th>Last tick</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var t in _all.Where(t => !t.RequiresMapping))
+            {
+                _stats.TryGetValue(t.Id, out var s);
+                <tr class="@RowClass(t, s.Count)">
+                    <td><strong>@t.Symbol</strong></td>
+                    <td>@t.Name</td>
+                    <td>
+                        <input type="checkbox" checked="@t.Enabled"
+                               @onchange="@(e => ToggleEnabled(t, (bool)e.Value!))" />
+                    </td>
+                    <td>@(t.IsAvailableOnCex ? "yes" : "no")</td>
+                    <td>
+                        <select class="form-select form-select-sm" @onchange="@(e => AssignProxy(t, e.Value as string))">
+                            <option value="" selected="@(t.ProxyId == null)">shared IP</option>
+                            @foreach (var p in _proxies)
+                            {
+                                <option value="@p.Id" selected="@(t.ProxyId == p.Id)">@p.Host:@p.Port</option>
+                            }
+                        </select>
+                    </td>
+                    <td>
+                        <select class="form-select form-select-sm" disabled="@(t.ProxyId == null)"
+                                @onchange="@(e => SetFallbackPolicy(t, (string)e.Value!))">
+                            <option value="Strict" selected="@(t.ProxyFallbackPolicy == ProxyFallbackPolicy.Strict)">Strict</option>
+                            <option value="FallbackToSharedIp" selected="@(t.ProxyFallbackPolicy == ProxyFallbackPolicy.FallbackToSharedIp)">Fallback to shared IP</option>
+                        </select>
+                    </td>
+                    <td>
+                        <input type="number" step="0.0001" class="form-control form-control-sm" style="width:100px"
+                               value="@_quoteAmounts.GetValueOrDefault(t.Id, 0.01m)"
+                               @onchange="@(e => SetQuoteAmount(t, decimal.Parse((string)e.Value!)))" />
+                    </td>
+                    <td>@s.Count</td>
+                    <td>@LastTickLabel(s.LastAt)</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => DeleteToken(t)">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Token>? _all;
+    private List<Token>? _pending;
+    private List<Proxy> _proxies = new();
+    private Dictionary<Guid, (int Count, DateTime? LastAt)> _stats = new();
+    private Dictionary<Guid, decimal> _quoteAmounts = new();
+
+    private bool _showAddForm;
+    private string _newSymbol = "";
+    private string _newMint = "";
+    private string _newBingxSymbol = "";
+    private string? _addError;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var since = DateTime.UtcNow.AddHours(-1);
+
+        _all = await db.Tokens.OrderBy(t => t.Symbol).ToListAsync();
+        _pending = _all.Where(t => t.RequiresMapping).ToList();
+        _proxies = await db.Proxies.OrderBy(p => p.Host).ToListAsync();
+        _quoteAmounts = await TokenRepo.GetAllQuoteAmountsAsync();
+
+        var stats = await db.SpreadTicks
+            .Where(t => t.CalculatedAt >= since)
+            .GroupBy(t => t.TokenId)
+            .Select(g => new { TokenId = g.Key, Count = g.Count(), LastAt = g.Max(x => x.CalculatedAt) })
+            .ToListAsync();
+        _stats = stats.ToDictionary(s => s.TokenId, s => (s.Count, (DateTime?)s.LastAt));
+    }
+
+    private async Task ConfirmMapping(Token t)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.RequiresMapping = false;
+        tracked.Enabled = true;
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Logger.LogInformation("Admin confirmed mapping for {Symbol} ({Mint})", tracked.Symbol, tracked.SolanaMint);
+        await LoadAsync();
+    }
+
+    private async Task RejectMapping(Token t)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.RequiresMapping = false;
+        tracked.Enabled = false;
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Logger.LogInformation("Admin rejected mapping for {Symbol} ({Mint})", tracked.Symbol, tracked.SolanaMint);
+        await LoadAsync();
+    }
+
+    private async Task ToggleEnabled(Token t, bool value)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.Enabled = value;
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task AssignProxy(Token t, string? proxyIdRaw)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.ProxyId = string.IsNullOrEmpty(proxyIdRaw) ? null : Guid.Parse(proxyIdRaw);
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task SetFallbackPolicy(Token t, string policyRaw)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.ProxyFallbackPolicy = Enum.Parse<ProxyFallbackPolicy>(policyRaw);
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task SetQuoteAmount(Token t, decimal amount)
+    {
+        await TokenRepo.SetQuoteAmountAsync(t.Id, amount);
+        Logger.LogInformation("Admin set quote amount for {Symbol} to {Amount}", t.Symbol, amount);
+        await LoadAsync();
+    }
+
+    private async Task DeleteToken(Token t)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Tokens.Where(x => x.Id == t.Id).ExecuteDeleteAsync();
+        Logger.LogInformation("Admin deleted token {Symbol} ({Mint})", t.Symbol, t.SolanaMint);
+        await LoadAsync();
+    }
+
+    private async Task AddToken()
+    {
+        _addError = null;
+        if (string.IsNullOrWhiteSpace(_newSymbol) || string.IsNullOrWhiteSpace(_newMint) || string.IsNullOrWhiteSpace(_newBingxSymbol))
+        {
+            _addError = "Все поля обязательны.";
+            return;
+        }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Tokens.Add(new Token
+        {
+            Symbol = _newSymbol,
+            SolanaMint = _newMint,
+            BingxSymbol = _newBingxSymbol,
+            // USDC — see TokenSyncService.UsdcMint.
+            JupiterInputMint = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+            JupiterInputDecimals = 6,
+            BingxUrl = $"https://bingx.com/en/perpetual/{_newBingxSymbol}",
+            JupiterUrl = $"https://jup.ag/swap/{_newSymbol}-USDC",
+            SolscanUrl = $"https://solscan.io/token/{_newMint}",
+            Enabled = true,
+            IsAvailableOnCex = true,
+            RequiresMapping = false,
+        });
+        await db.SaveChangesAsync();
+        Logger.LogInformation("Admin created token {Symbol} ({Mint}) manually", _newSymbol, _newMint);
+
+        _showAddForm = false;
+        _newSymbol = ""; _newMint = ""; _newBingxSymbol = "";
+        await LoadAsync();
+    }
+
+    private static string RowClass(Token t, int ticksLastHour)
+    {
+        if (!t.Enabled) return "";
+        return ticksLastHour == 0 ? "table-danger" : ticksLastHour < 10 ? "table-warning" : "";
+    }
+
+    private static string LastTickLabel(DateTime? lastAt)
+    {
+        if (lastAt is null) return "never";
+        var age = DateTime.UtcNow - lastAt.Value;
+        return age.TotalMinutes < 1 ? $"{age.TotalSeconds:F0}s ago" : $"{age.TotalMinutes:F0}m ago";
+    }
+}

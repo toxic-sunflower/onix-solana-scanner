@@ -15,6 +15,14 @@ interface Session {
   isCurrent: boolean;
 }
 
+const LANGUAGES = [
+  { code: 'en', label: '🇬🇧 English' },
+  { code: 'ru', label: '🇷🇺 Русский' },
+  { code: 'de', label: '🇩🇪 Deutsch' },
+  { code: 'es', label: '🇪🇸 Español' },
+  { code: 'fr', label: '🇫🇷 Français' },
+];
+
 export default function Settings({ onBack }: { onBack: () => void }) {
   const [settings, setSettings] = useState<UserSettings>({
     minimalSpreadPct: 5,
@@ -23,6 +31,10 @@ export default function Settings({ onBack }: { onBack: () => void }) {
     timezone: 'UTC',
   });
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [language, setLanguage] = useState('en');
+  const [backupCodeCount, setBackupCodeCount] = useState<number | null>(null);
+  const [generatedCodes, setGeneratedCodes] = useState<string[] | null>(null);
+  const [deleteConfirming, setDeleteConfirming] = useState(false);
 
   useEffect(() => {
     authFetch('/api/v1/settings')
@@ -30,6 +42,14 @@ export default function Settings({ onBack }: { onBack: () => void }) {
       .then(setSettings)
       .catch(console.error);
     getSessions().then(setSessions).catch(console.error);
+    authFetch('/api/v1/auth/me')
+      .then(res => res.json())
+      .then(d => { if (d.language) setLanguage(d.language); })
+      .catch(console.error);
+    authFetch('/api/v1/auth/backup-codes/count')
+      .then(res => res.json())
+      .then(d => setBackupCodeCount(d.count))
+      .catch(console.error);
   }, []);
 
   const save = async () => {
@@ -38,6 +58,33 @@ export default function Settings({ onBack }: { onBack: () => void }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
+  };
+
+  const saveLanguage = async (lang: string) => {
+    setLanguage(lang);
+    await authFetch('/api/v1/auth/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ language: lang }),
+    });
+  };
+
+  const generateBackupCodes = async () => {
+    const res = await authFetch('/api/v1/auth/backup-codes/generate', { method: 'POST' });
+    if (res.ok) {
+      const data = await res.json();
+      setGeneratedCodes(data.codes);
+      setBackupCodeCount(data.codes.length);
+    }
+  };
+
+  const deleteAccount = async () => {
+    const res = await authFetch('/api/v1/auth/me', { method: 'DELETE' });
+    if (res.ok) {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('refresh_token');
+      window.location.reload();
+    }
   };
 
   const handleRevokeSession = async (id: string) => {
@@ -57,6 +104,14 @@ export default function Settings({ onBack }: { onBack: () => void }) {
 
       <div className="flex flex-col gap-4">
         <h2 className="text-lg font-bold text-[#f1f5f9]">Settings</h2>
+
+        <label className="flex flex-col gap-1.5">
+          <span className="text-sm text-[#94a3b8]">Language</span>
+          <select value={language} onChange={e => saveLanguage(e.target.value)}
+            className="px-3 py-1.5 bg-[#16171d] border border-[#2a2b36] rounded text-sm text-[#f1f5f9] focus:outline-none focus:border-[#f59e0b]">
+            {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.label}</option>)}
+          </select>
+        </label>
 
         <label className="flex flex-col gap-1.5">
           <span className="text-sm text-[#94a3b8]">Min Spread % for signal</span>
@@ -112,6 +167,53 @@ export default function Settings({ onBack }: { onBack: () => void }) {
 
         <button onClick={logout}
           className="px-3 py-1.5 bg-[#2a2b36] text-[#94a3b8] rounded text-sm hover:bg-[#3a3b48] transition-colors self-start">Logout this device</button>
+
+        <hr className="border-[#2a2b36]" />
+
+        <h3 className="text-base font-semibold text-[#f1f5f9]">Recovery codes</h3>
+        <p className="text-sm text-[#64748b]">
+          If you lose access to Telegram, a recovery code lets you log in without it.
+          {backupCodeCount !== null && backupCodeCount > 0 && ` ${backupCodeCount} unused code(s) remaining.`}
+          {backupCodeCount === 0 && ' No codes generated yet.'}
+        </p>
+        <button onClick={generateBackupCodes}
+          className="px-3 py-1.5 bg-[#2a2b36] text-[#94a3b8] rounded text-sm hover:bg-[#3a3b48] transition-colors self-start">
+          {backupCodeCount ? 'Regenerate codes (invalidates old ones)' : 'Generate recovery codes'}
+        </button>
+        {generatedCodes && (
+          <div className="bg-[#16171d] border border-[#2a2b36] rounded p-3 flex flex-col gap-1">
+            <p className="text-xs text-[#f59e0b] mb-1">Save these now — they won't be shown again:</p>
+            <div className="grid grid-cols-2 gap-1 font-mono text-sm text-[#f1f5f9]">
+              {generatedCodes.map(c => <span key={c}>{c}</span>)}
+            </div>
+          </div>
+        )}
+
+        <hr className="border-[#2a2b36]" />
+
+        <h3 className="text-base font-semibold text-[#ef4444]">Danger zone</h3>
+        {!deleteConfirming ? (
+          <button onClick={() => setDeleteConfirming(true)}
+            className="px-3 py-1.5 bg-[#3a2a2a] text-[#ef4444] rounded text-sm hover:bg-[#4a2a2a] transition-colors self-start">
+            Delete account
+          </button>
+        ) : (
+          <div className="flex flex-col gap-2 items-start">
+            <p className="text-sm text-[#ef4444]">
+              This permanently deletes your account and all data (favorites, blacklist, alert settings, sessions). This cannot be undone.
+            </p>
+            <div className="flex gap-2">
+              <button onClick={deleteAccount}
+                className="px-3 py-1.5 bg-[#ef4444] text-black font-medium rounded text-sm hover:bg-[#dc2626] transition-colors">
+                Yes, delete everything
+              </button>
+              <button onClick={() => setDeleteConfirming(false)}
+                className="px-3 py-1.5 bg-[#2a2b36] text-[#94a3b8] rounded text-sm hover:bg-[#3a3b48] transition-colors">
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

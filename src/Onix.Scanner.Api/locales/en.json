@@ -14,5 +14,19 @@
   "signal_profit": "💰 Profit: {spread}%",
   "signal_bingx": "💵 BINGX: ${price}",
   "signal_jupiter": "💵 Jupiter: ${price}",
-  "signal_contract": "📋 Contract: {id}"
+  "signal_contract": "📋 Contract: {id}",
+
+  "logout_title": "✅ {symbol}  spread back to {spread}% (below your threshold)",
+
+  "settings_menu": "⚙️ *Settings*\n\nMin spread threshold: {threshold}%\nCooldown: {cooldown}s\nNotifications: {status}",
+  "settings_toggle_btn": "🔔 Toggle notifications",
+  "settings_open_app_btn": "Open full settings",
+  "notif_on": "ON",
+  "notif_off": "OFF",
+
+  "delete_confirm": "⚠️ Delete your account and *all* your data (favorites, blacklist, alert settings, sessions)? This cannot be undone.",
+  "delete_yes_btn": "Yes, delete everything",
+  "delete_no_btn": "Cancel",
+  "delete_cancelled": "Cancelled — your account was not touched.",
+  "delete_done": "Your account and all associated data have been deleted."
 }

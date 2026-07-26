@@ -17,6 +17,7 @@ public class AppDbContext : DbContext
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<BlacklistedJti> BlacklistedJtis => Set<BlacklistedJti>();
     public DbSet<TokenQuoteAmount> TokenQuoteAmounts => Set<TokenQuoteAmount>();
+    public DbSet<BackupCode> BackupCodes => Set<BackupCode>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
@@ -165,6 +166,17 @@ public class AppDbContext : DbContext
             e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
             e.HasIndex(x => x.Jti).IsUnique().HasDatabaseName("idx_blacklisted_jtis_jti");
             e.HasIndex(x => x.ExpiresAt).HasDatabaseName("idx_blacklisted_jtis_expires");
+        });
+
+        modelBuilder.Entity<BackupCode>(e =>
+        {
+            e.ToTable("backup_codes");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
+            e.Property(x => x.CodeHash).HasMaxLength(64).IsRequired();
+            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            e.HasIndex(x => x.CodeHash).IsUnique().HasDatabaseName("idx_backup_codes_hash");
+            e.HasIndex(x => x.UserId).HasDatabaseName("idx_backup_codes_user_id");
         });
 
     }

@@ -1,0 +1,23 @@
+@page "/login"
+@layout Onix.Scanner.Admin.Components.Layout.EmptyLayout
+@attribute [AllowAnonymous]
+@inject Microsoft.AspNetCore.Http.IHttpContextAccessor HttpContextAccessor
+
+<PageTitle>Onix Admin — Login</PageTitle>
+
+<div style="max-width:320px;margin:96px auto;font-family:system-ui,sans-serif;">
+    <h3>Onix Admin</h3>
+
+    @if (HttpContextAccessor.HttpContext?.Request.Query["error"].ToString() == "1")
+    {
+        <p style="color:#c0392b;">Invalid username or password.</p>
+    }
+
+    <form method="post" action="/account/login">
+        <input type="text" name="username" placeholder="Username" autocomplete="username"
+               style="display:block;width:100%;margin-bottom:8px;padding:8px;box-sizing:border-box;" />
+        <input type="password" name="password" placeholder="Password" autocomplete="current-password"
+               style="display:block;width:100%;margin-bottom:8px;padding:8px;box-sizing:border-box;" />
+        <button type="submit" style="width:100%;padding:8px;">Log in</button>
+    </form>
+</div>

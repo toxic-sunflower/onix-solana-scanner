@@ -25,7 +25,12 @@ full flow description.
 | POST | `/auth/revoke-others` | required | Log out every session except the current one (`{refreshToken}` identifies "current"). |
 | GET | `/auth/sessions` | required | List active sessions (`?currentRefreshToken=` to flag which one is "you"). |
 | DELETE | `/auth/sessions/{id}` | required | Revoke one specific session. |
-| GET | `/auth/me` | required | Basic profile: id, Telegram id, display name, role. |
+| GET | `/auth/me` | required | Basic profile: id, Telegram id, display name, language, role. |
+| PATCH | `/auth/me` | required | `{language}` — the only User-row fields the Mini App Settings page edits directly (everything else lives in `/settings`). |
+| DELETE | `/auth/me` | required | Full account deletion — cleans up every table referencing this user (favorites, blacklist, sessions, backup codes, per-user settings), not just the `users` row. Irreversible. |
+| POST | `/auth/backup-codes/generate` | required | Regenerates 10 single-use recovery codes, invalidating any previous set. Returns plaintext codes once; only their SHA-256 hash is persisted. |
+| GET | `/auth/backup-codes/count` | required | How many unused recovery codes remain. |
+| POST | `/auth/backup-codes/login` | AllowAnonymous | `{code}` — alternate login when Telegram is unreachable. Consumes the code on success. |
 
 ## Tokens (public catalog + per-token data)
 
@@ -77,6 +82,7 @@ full flow description.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/health` | AllowAnonymous | `{status: "ok", timestamp}`. Used by the blue/green deploy healthcheck. |
+| GET | `/metrics` | AllowAnonymous (not routed through nginx — see notes) | Prometheus exposition format (OpenTelemetry). Not reachable from the public internet: `frontend/nginx.conf` only proxies `/api/` and `/hubs/`, so this path only resolves against the API container's own port on the docker-compose network — a Prometheus instance on that same network is the intended (and only) caller. |
 
 ## Telegram webhook (Telegram → us, not for frontend use)
 

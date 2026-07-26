@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Onix.Scanner.Admin/Onix.Scanner.Admin.csproj" />
     <Project Path="src/Onix.Scanner.Api/Onix.Scanner.Api.csproj" />
     <Project Path="src/Onix.Scanner.AppHost/Onix.Scanner.AppHost.csproj" />
     <Project Path="src/Onix.Scanner.Core/Onix.Scanner.Core.csproj" />

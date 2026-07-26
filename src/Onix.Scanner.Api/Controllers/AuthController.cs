@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
@@ -337,15 +339,133 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("me")]
-    public ActionResult Me()
+    public async Task<ActionResult> Me(CancellationToken ct)
     {
+        var user = await _userRepo.GetByIdAsync(User.GetUserId(), ct);
+        if (user is null) return Unauthorized();
+
         return Ok(new
         {
-            Id = User.GetUserId(),
-            TelegramId = User.GetTelegramId(),
-            TelegramUsername = User.FindFirstValue("telegram_id"),
-            DisplayName = User.Identity?.Name,
+            Id = user.Id,
+            TelegramId = user.TelegramId,
+            TelegramUsername = user.TelegramUsername,
+            DisplayName = user.DisplayName,
+            Language = user.Language,
             role = User.FindFirstValue(ClaimTypes.Role)
+        });
+    }
+
+    /// <summary>Profile fields the Mini App Settings page can edit directly
+    /// (TODO.md "Настройки — язык"). Everything else (spread threshold,
+    /// cooldown, timezone, notifications) already lives in
+    /// SettingsController — this is just the bit that's on the User row
+    /// itself, not UserSettings.</summary>
+    [Authorize]
+    [HttpPatch("me")]
+    public async Task<ActionResult> UpdateMe([FromBody] UpdateMeRequest request, CancellationToken ct)
+    {
+        var user = await _userRepo.GetByIdAsync(User.GetUserId(), ct);
+        if (user is null) return Unauthorized();
+
+        if (request.Language is not null)
+            user.Language = request.Language;
+
+        await _userRepo.UpdateAsync(user, ct);
+        return NoContent();
+    }
+
+    /// <summary>TODO.md "Удалить аккаунт" — full account deletion, not just
+    /// logout. Cleans up every table that references this user (see
+    /// UserRepository.DeleteAsync); irreversible.</summary>
+    [Authorize]
+    [HttpDelete("me")]
+    public async Task<ActionResult> DeleteMe(CancellationToken ct)
+    {
+        await _userRepo.DeleteAsync(User.GetUserId(), ct);
+        return NoContent();
+    }
+
+    // ── Backup codes (TODO.md "Что если потерял Telegram?") ──
+
+    private static string HashBackupCode(string code) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(code.Trim().ToUpperInvariant())));
+
+    private static string GenerateBackupCode()
+    {
+        // 5 random bytes -> 10 hex chars, split for readability. Not meant to
+        // be memorized — the user downloads/screenshots these once.
+        var hex = Convert.ToHexString(RandomNumberGenerator.GetBytes(5));
+        return $"{hex[..5]}-{hex[5..]}";
+    }
+
+    /// <summary>Regenerates the set of 10 recovery codes, invalidating any
+    /// previous ones. Returns the plaintext codes exactly once — only the
+    /// SHA-256 hash is persisted.</summary>
+    [Authorize]
+    [HttpPost("backup-codes/generate")]
+    public async Task<ActionResult> GenerateBackupCodes(CancellationToken ct)
+    {
+        var userId = User.GetUserId();
+        var codes = Enumerable.Range(0, 10).Select(_ => GenerateBackupCode()).ToList();
+        var hashes = codes.Select(HashBackupCode).ToList();
+        await _userRepo.ReplaceBackupCodesAsync(userId, hashes, ct);
+        _logger.LogInformation("Backup codes regenerated for user {UserId}", userId);
+        return Ok(new { codes });
+    }
+
+    [Authorize]
+    [HttpGet("backup-codes/count")]
+    public async Task<ActionResult> BackupCodeCount(CancellationToken ct)
+    {
+        var count = await _userRepo.GetBackupCodeCountAsync(User.GetUserId(), ct);
+        return Ok(new { count });
+    }
+
+    /// <summary>Alternate login path when the user can no longer reach
+    /// Telegram — the sole other credential is a backup code generated
+    /// in advance. Single-use: consumed on success.</summary>
+    [AllowAnonymous]
+    [HttpPost("backup-codes/login")]
+    public async Task<ActionResult> LoginWithBackupCode([FromBody] BackupCodeLoginRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code))
+            return BadRequest(new { error = "code_required" });
+
+        var hash = HashBackupCode(request.Code);
+        var stored = await _userRepo.GetByCodeHashAsync(hash, ct);
+        if (stored is null)
+            return Unauthorized(new { error = "invalid_code" });
+
+        var user = await _userRepo.GetByIdAsync(stored.UserId, ct);
+        if (user is null)
+            return Unauthorized(new { error = "invalid_code" });
+
+        await _userRepo.ConsumeBackupCodeAsync(stored.Id, ct);
+
+        user.LastLoginAt = DateTime.UtcNow;
+        await _userRepo.UpdateAsync(user, ct);
+
+        var accessToken = _jwt.GenerateAccessToken(user.Id, user.TelegramId, user.Role, user.TokenVersion, out var jti);
+        var (refreshToken, refreshHash) = _jwt.GenerateRefreshToken();
+
+        await _userRepo.SaveRefreshTokenAsync(new RefreshToken
+        {
+            UserId = user.Id,
+            TokenHash = refreshHash,
+            DeviceName = DeviceName,
+            IpAddress = IpAddress,
+            LastJti = jti,
+            ExpiresAt = DateTime.UtcNow.AddDays(30),
+        }, ct);
+
+        _logger.LogWarning("User {UserId} logged in via backup code (Telegram recovery path)", user.Id);
+
+        return Ok(new
+        {
+            token = accessToken,
+            refreshToken,
+            userId = user.Id,
+            expiresAt = DateTime.UtcNow.AddDays(30)
         });
     }
 
@@ -363,6 +483,16 @@ public class AuthController : ControllerBase
     public class RevokeRequest
     {
         public string RefreshToken { get; set; } = string.Empty;
+    }
+
+    public class UpdateMeRequest
+    {
+        public string? Language { get; set; }
+    }
+
+    public class BackupCodeLoginRequest
+    {
+        public string Code { get; set; } = string.Empty;
     }
 
 }

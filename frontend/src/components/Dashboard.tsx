@@ -26,6 +26,25 @@ interface Props {
 
 type FilterType = 'all' | 'positive';
 
+interface ColumnPrefs {
+  name: boolean;
+  mint: boolean;
+  links: boolean;
+  recentLog: boolean;
+}
+
+const DEFAULT_COLUMNS: ColumnPrefs = { name: true, mint: true, links: true, recentLog: true };
+const COLUMNS_KEY = 'dashboard_columns';
+
+function loadColumnPrefs(): ColumnPrefs {
+  try {
+    const raw = localStorage.getItem(COLUMNS_KEY);
+    return raw ? { ...DEFAULT_COLUMNS, ...JSON.parse(raw) } : DEFAULT_COLUMNS;
+  } catch {
+    return DEFAULT_COLUMNS;
+  }
+}
+
 export default function Dashboard({ onNavigate }: Props) {
   const [allTokens, setAllTokens] = useState<TokenInfo[]>([]);
   const [connected, setConnected] = useState(false);
@@ -36,6 +55,16 @@ export default function Dashboard({ onNavigate }: Props) {
   const [now, setNow] = useState(Date.now());
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
+  const [columns, setColumns] = useState<ColumnPrefs>(loadColumnPrefs);
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+
+  const toggleColumn = (key: keyof ColumnPrefs) => {
+    setColumns(prev => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem(COLUMNS_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   useEffect(() => {
     authFetch('/api/v1/settings')
@@ -197,6 +226,26 @@ export default function Dashboard({ onNavigate }: Props) {
         <input type="text" placeholder="Search..."
           value={search} onChange={e => setSearch(e.target.value)}
           className="ml-auto px-2.5 py-1 bg-[#16171d] border border-[#2a2b36] rounded text-xs text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] w-36" />
+        <div className="relative">
+          <button onClick={() => setShowColumnMenu(v => !v)}
+            title="Customize card fields"
+            className="px-2.5 py-1 rounded text-xs bg-[#1e1f28] text-[#64748b] hover:text-[#94a3b8] transition-colors">⚙ Columns</button>
+          {showColumnMenu && (
+            <div className="absolute right-0 mt-1 z-10 bg-[#16171d] border border-[#2a2b36] rounded p-2 flex flex-col gap-1.5 w-40">
+              {([
+                ['name', 'Token name'],
+                ['mint', 'Mint address'],
+                ['links', 'Exchange links'],
+                ['recentLog', 'Recent log'],
+              ] as const).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer text-xs text-[#f1f5f9]">
+                  <input type="checkbox" checked={columns[key]} onChange={() => toggleColumn(key)} className="accent-[#f59e0b]" />
+                  {label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-col gap-2.5">
@@ -210,6 +259,7 @@ export default function Dashboard({ onNavigate }: Props) {
             onFavorite={doFavorite}
             onBlacklist={doBlacklist}
             alertThreshold={alertThreshold}
+            columns={columns}
             onClickChart={(id) => onNavigate('chart', id)}
             onClickHistory={(id) => onNavigate('history', id)} />
         ))}

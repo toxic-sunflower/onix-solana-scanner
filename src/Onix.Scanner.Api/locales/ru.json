@@ -14,5 +14,19 @@
   "signal_profit": "💰 Прибыль: {spread}%",
   "signal_bingx": "💵 BINGX: ${price}",
   "signal_jupiter": "💵 Jupiter: ${price}",
-  "signal_contract": "📋 Контракт: {id}"
+  "signal_contract": "📋 Контракт: {id}",
+
+  "logout_title": "✅ {symbol}  спред вернулся к {spread}% (ниже вашего порога)",
+
+  "settings_menu": "⚙️ *Настройки*\n\nПорог спреда: {threshold}%\nCooldown: {cooldown}с\nУведомления: {status}",
+  "settings_toggle_btn": "🔔 Переключить уведомления",
+  "settings_open_app_btn": "Открыть все настройки",
+  "notif_on": "ВКЛ",
+  "notif_off": "ВЫКЛ",
+
+  "delete_confirm": "⚠️ Удалить аккаунт и *все* данные (избранное, чёрный список, настройки алертов, сессии)? Это необратимо.",
+  "delete_yes_btn": "Да, удалить всё",
+  "delete_no_btn": "Отмена",
+  "delete_cancelled": "Отменено — аккаунт не тронут.",
+  "delete_done": "Ваш аккаунт и все связанные данные удалены."
 }

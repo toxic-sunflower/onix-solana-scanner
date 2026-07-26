@@ -1,0 +1,107 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Onix.Scanner.Infrastructure.Data
+@inject IDbContextFactory<AppDbContext> DbFactory
+
+<PageTitle>System Settings</PageTitle>
+
+<h1>System Settings</h1>
+<p class="text-muted">
+    TZ п.14.2 — обзор технических параметров по группам. Большинство значений задаются в коде/env
+    (сознательное архитектурное решение — они меняются редко и требуют деплоя, а не рантайм-конфига),
+    поэтому эта страница read-only справочник, а не форма редактирования. Единственное реально
+    рантайм-редактируемое — Enabled/Proxy/Fallback policy/Quote amount на странице Tokens.
+</p>
+
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Jupiter</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">API: <code>lite-api.jup.ag/swap/v1/quote</code></li>
+                <li class="list-group-item">Request timeout: 4s</li>
+                <li class="list-group-item">Poll interval (per token): 1s</li>
+                <li class="list-group-item">Group concurrency: 5 параллельных запросов</li>
+                <li class="list-group-item">Group pacing: 250ms между стартами внутри группы</li>
+                <li class="list-group-item">429 backoff: 15-30s, только на пострадавший токен</li>
+                <li class="list-group-item">Input mint / Quote amount — per-token, редактируется на странице Tokens</li>
+            </ul>
+            <div class="card-footer text-muted small">Определено в JupiterWorkerService.cs</div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">BingX</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">WebSocket: <code>wss://open-api-swap.bingx.com/swap-market</code></li>
+                <li class="list-group-item">Подписка: depth10@100ms на каждый включённый символ</li>
+                <li class="list-group-item">Heartbeat: ping/pong (текстовый и JSON-варианты)</li>
+                <li class="list-group-item">Reconnect: экспоненциальный backoff + jitter, до 60s</li>
+                <li class="list-group-item">Состояние (connected/reconnect count/per-symbol staleness) — раз в минуту в логах</li>
+            </ul>
+            <div class="card-footer text-muted small">Определено в BingXConnectorService.cs</div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Freshness</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">max_quote_age_ms: 2000ms</li>
+                <li class="list-group-item">max_source_delta_ms: 2000ms (BingX/Jupiter не должны расходиться больше)</li>
+                <li class="list-group-item">stale_threshold_ms (для статуса токена): 5000ms</li>
+            </ul>
+            <div class="card-footer text-muted small">Определено в SpreadCalculator.cs</div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Telegram</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">Bot token / webhook secret: из env (TELEGRAM_BOT_TOKEN / TELEGRAM_WEBHOOK_SECRET)</li>
+                <li class="list-group-item">Chat/channel — привязывается автоматически по Telegram ID при входе</li>
+                <li class="list-group-item">Threshold default: 5% (UserSettings.MinimalSpreadPct), настраивается пользователем в Settings</li>
+                <li class="list-group-item">Cooldown default: 300s, per-user</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">Storage</div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">Retention: 72h (raw ticks и spread_candles)</li>
+                <li class="list-group-item">Batch size записи тиков: 100</li>
+                <li class="list-group-item">Агрегация: 5m / 15m / 1h</li>
+                @if (_oldestTick is not null)
+                {
+                    <li class="list-group-item">
+                        Реально в БД сейчас: с @_oldestTick?.ToString("u") по @_newestTick?.ToString("u")
+                        (@_totalTicks.ToString("N0") тиков)
+                    </li>
+                }
+            </ul>
+            <div class="card-footer text-muted small">Определено в RetentionService.cs / SpreadEngineService.cs</div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime? _oldestTick;
+    private DateTime? _newestTick;
+    private long _totalTicks;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _totalTicks = await db.SpreadTicks.LongCountAsync();
+        if (_totalTicks > 0)
+        {
+            _oldestTick = await db.SpreadTicks.MinAsync(t => t.CalculatedAt);
+            _newestTick = await db.SpreadTicks.MaxAsync(t => t.CalculatedAt);
+        }
+    }
+}

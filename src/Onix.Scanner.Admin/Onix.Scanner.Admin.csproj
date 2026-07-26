@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Onix.Scanner.Infrastructure\Onix.Scanner.Infrastructure.csproj" />
+    <ProjectReference Include="..\Onix.Scanner.Core\Onix.Scanner.Core.csproj" />
+    <ProjectReference Include="..\Onix.Scanner.Shared\Onix.Scanner.Shared.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+  </PropertyGroup>
+
+</Project>
