@@ -47,7 +47,17 @@ if (File.Exists(envPath))
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
-builder.Services.AddControllers()
+
+// Demo-quota gating (DemoQuotaFilter/DemoUsageTrackerService) is implemented
+// but off by default while the feature is still being built/debugged — flip
+// DemoMode__Enabled=true (env) / DemoMode:Enabled=true (config) to turn it on.
+var demoModeEnabled = builder.Configuration.GetValue<bool>("DemoMode:Enabled");
+
+builder.Services.AddControllers(o =>
+{
+    if (demoModeEnabled)
+        o.Filters.Add<Onix.Scanner.Api.Auth.DemoQuotaFilter>();
+})
     .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
 var encryptionKey = Convert.FromBase64String(
@@ -145,6 +155,8 @@ builder.Services.AddScoped<IUserSettingsRepository, UserSettingsRepository>();
 
 builder.Services.AddHostedService<MigratorService>();
 builder.Services.AddHostedService<SnapshotWarmupService>();
+if (demoModeEnabled)
+    builder.Services.AddHostedService<DemoUsageTrackerService>();
 builder.Services.AddHostedService<BingXConnectorService>();
 builder.Services.AddHostedService<SpreadEngineService>();
 builder.Services.AddHostedService<JupiterWorkerService>();

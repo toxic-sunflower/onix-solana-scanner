@@ -30,4 +30,8 @@ public interface IUserRepository
     Task CleanupExpiredBlacklistedJtisAsync(CancellationToken ct = default);
     Task<LoginToken> CreateLoginTokenAsync(Guid userId, TimeSpan lifetime, CancellationToken ct = default);
     Task<LoginToken?> ConsumeLoginTokenAsync(string token, CancellationToken ct = default);
+    Task<DemoStatus?> GetDemoStatusAsync(Guid userId, CancellationToken ct = default);
+    Task IncrementDemoSecondsAsync(IReadOnlyCollection<Guid> userIds, int seconds, CancellationToken ct = default);
 }
+
+public record DemoStatus(int DemoSecondsUsed, bool HasPaidAccess);

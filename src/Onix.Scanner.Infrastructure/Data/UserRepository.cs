@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Onix.Scanner.Core.Contracts;
+using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Infrastructure.Data;
@@ -201,5 +202,19 @@ public class UserRepository : IUserRepository
         if (lastSignalAt.HasValue) ut.LastSignalAt = lastSignalAt;
         ut.IsArmed = isArmed;
         await _db.SaveChangesAsync(ct);
+    }
+
+    public Task<DemoStatus?> GetDemoStatusAsync(Guid userId, CancellationToken ct = default) =>
+        _db.Users
+            .Where(u => u.Id == userId)
+            .Select(u => new DemoStatus(u.DemoSecondsUsed, u.HasPaidAccess))
+            .FirstOrDefaultAsync(ct);
+
+    public async Task IncrementDemoSecondsAsync(IReadOnlyCollection<Guid> userIds, int seconds, CancellationToken ct = default)
+    {
+        if (userIds.Count == 0) return;
+        await _db.Users
+            .Where(u => userIds.Contains(u.Id) && u.Role != UserRole.Admin && !u.HasPaidAccess)
+            .ExecuteUpdateAsync(u => u.SetProperty(x => x.DemoSecondsUsed, x => x.DemoSecondsUsed + seconds), ct);
     }
 }

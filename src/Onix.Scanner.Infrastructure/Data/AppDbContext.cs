@@ -78,6 +78,8 @@ public class AppDbContext : DbContext
                 e.Property(x => x.TelegramId).IsRequired();
             e.Property(x => x.Status).HasMaxLength(10).HasDefaultValue("new");
             e.Property(x => x.Role).HasMaxLength(20).HasConversion<string>().HasDefaultValue(UserRole.User);
+            e.Property(x => x.DemoSecondsUsed).HasDefaultValue(0);
+            e.Property(x => x.HasPaidAccess).HasDefaultValue(false);
             e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
             e.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
             e.HasIndex(x => x.TelegramId).IsUnique().HasDatabaseName("idx_users_telegram_id");

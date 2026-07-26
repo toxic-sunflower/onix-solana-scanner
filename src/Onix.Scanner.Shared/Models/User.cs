@@ -21,4 +21,13 @@ public class User
     public DateTime? LastLoginAt { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Accumulated seconds of "online" time (time with a live SSE
+    /// connection open), not wall-clock time since registration. Ticked by
+    /// DemoUsageTrackerService. See <see cref="Onix.Scanner.Shared.DemoPolicy"/>.</summary>
+    public int DemoSecondsUsed { get; set; }
+
+    /// <summary>Placeholder for the payment integration — set once a user
+    /// pays, exempts them from the demo quota regardless of DemoSecondsUsed.</summary>
+    public bool HasPaidAccess { get; set; }
 }

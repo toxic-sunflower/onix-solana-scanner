@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Core.Contracts;
+using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Api.Controllers;
 
 [ApiController]
 [Authorize]
+[ExemptFromDemoQuota]
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
@@ -155,15 +157,20 @@ public class AuthController : ControllerBase
 
     [Authorize]
     [HttpGet("check")]
-    public ActionResult Check()
+    public async Task<ActionResult> Check(CancellationToken ct)
     {
         var telegramIdClaim = User.FindFirstValue("telegram_id");
+        var demo = await _userRepo.GetDemoStatusAsync(User.GetUserId(), ct);
+
         return Ok(new
         {
             userId = User.GetUserId().ToString(),
             telegramId = telegramIdClaim != null ? (long?)long.Parse(telegramIdClaim) : null,
             role = User.FindFirstValue(ClaimTypes.Role),
             tier = User.FindFirstValue("tier"),
+            demoSecondsUsed = demo?.DemoSecondsUsed ?? 0,
+            demoQuotaSeconds = DemoPolicy.QuotaSeconds,
+            hasPaidAccess = demo?.HasPaidAccess ?? false,
         });
     }
 

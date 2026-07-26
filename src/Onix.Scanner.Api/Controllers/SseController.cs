@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Threading.Channels;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Onix.Scanner.Api.Auth;
 using Onix.Scanner.Api.Services;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
@@ -39,7 +40,7 @@ public class SseController : ControllerBase
         {
             FullMode = BoundedChannelFullMode.DropOldest
         });
-        var id = _broadcaster.Register(group, channel.Writer);
+        var id = _broadcaster.Register(group, User.GetUserId(), channel.Writer);
 
         try
         {
