@@ -9,8 +9,12 @@ using Onix.Scanner.Shared.Models;
 namespace Onix.Scanner.Api.Services;
 
 /// <summary>
-/// One async worker task per enabled token. A token's failure/timeout never blocks
-/// other tokens; concurrency and pacing per proxy (or the shared/no-proxy group) is
+/// One persistent async loop per enabled token (per TZ 7.1/7.3: "один токен =
+/// один независимый worker"), started/stopped by a lightweight supervisor
+/// that refreshes the enabled-token list once a second. A token's own loop
+/// never waits on any other token's — a slow/stuck token can't delay
+/// anyone else's cadence the way a shared Task.WhenAll batch would.
+/// Concurrency and pacing per proxy (or the shared/no-proxy group) is still
 /// capped so free-tier rate limits aren't hammered.
 /// </summary>
 public sealed class JupiterWorkerService : BackgroundService
@@ -23,6 +27,7 @@ public sealed class JupiterWorkerService : BackgroundService
     // the lite-api endpoint below is the current free-tier Quote API.
     private const string QuoteApiBase = "https://lite-api.jup.ag/swap/v1/quote";
     private const int PollIntervalMs = 1000;
+    private const int SupervisorRefreshMs = 1000;
     private const int RequestTimeoutSeconds = 4;
     private const int GroupConcurrency = 5;
     private const int MinIntervalPerGroupMs = 250;
@@ -40,11 +45,12 @@ public sealed class JupiterWorkerService : BackgroundService
 
     // Observability: per-token last successful fetch (so "is Jimothy actually
     // being polled, and how stale is it?" is a log search away instead of a
-    // guess), plus per-cycle counters and a periodic summary. None of this
-    // existed before — every staleness question had to be answered by
-    // reasoning about the code instead of looking at data.
+    // guess), plus running counters (reset each time the summary is logged)
+    // and a periodic summary. None of this existed before — every staleness
+    // question had to be answered by reasoning about the code instead of
+    // looking at data.
     private readonly ConcurrentDictionary<Guid, (string Symbol, DateTime LastSuccessAt, int LatencyMs)> _tokenHealth = new();
-    private int _cycleSucceeded, _cycleRateLimited, _cycleErrored, _cycleSkippedBackoff;
+    private int _succeededSinceSummary, _rateLimitedSinceSummary, _erroredSinceSummary, _skippedBackoffSinceSummary;
     private DateTime _lastSummaryLogAt = DateTime.MinValue;
     private static readonly TimeSpan SummaryLogInterval = TimeSpan.FromSeconds(60);
 
@@ -57,13 +63,27 @@ public sealed class JupiterWorkerService : BackgroundService
     // means the rest of the group keeps polling normally.
     private readonly ConcurrentDictionary<Guid, DateTime> _tokenBackoffUntil = new();
 
+    private sealed class TokenWorkState
+    {
+        public required Token Token;
+        public Proxy? Proxy;
+        public decimal QuoteAmount;
+    }
+
+    // Supervisor swaps this in wholesale each refresh; token loops just read
+    // their own entry each iteration — keeps DB load flat (one bulk query a
+    // second, same as before) instead of N per-token queries a second.
+    private volatile Dictionary<Guid, TokenWorkState> _current = new();
+
+    private readonly ConcurrentDictionary<Guid, (CancellationTokenSource Cts, Task Loop)> _workers = new();
+
     /// <summary>Logs failures at Warning (visible at default log level) but at
     /// most once per token per minute — this runs per-token every ~1s, so
     /// logging every occurrence would flood the log instead of explaining
     /// anything.</summary>
     private void LogFailureThrottled(Token token, string message, Exception? ex = null)
     {
-        Interlocked.Increment(ref _cycleErrored);
+        Interlocked.Increment(ref _erroredSinceSummary);
         var now = DateTime.UtcNow;
         var last = _lastErrorLogAt.GetOrAdd(token.Id, DateTime.MinValue);
         if (now - last < ErrorLogThrottle) return;
@@ -90,55 +110,110 @@ public sealed class JupiterWorkerService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
+        try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var tokenRepo = scope.ServiceProvider.GetRequiredService<ITokenRepository>();
-            var proxyRepo = scope.ServiceProvider.GetRequiredService<IProxyRepository>();
-
-            var tokens = await tokenRepo.GetAllAsync(stoppingToken);
-            var proxies = await proxyRepo.GetAllAsync(stoppingToken);
-            var quoteAmounts = await tokenRepo.GetAllQuoteAmountsAsync(stoppingToken);
-            var proxyMap = proxies.Where(p => p.Enabled).ToDictionary(p => p.Id);
-
-            var enabled = tokens
-                .Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.SolanaMint) && !string.IsNullOrWhiteSpace(t.JupiterInputMint))
-                .ToList();
-
-            Interlocked.Exchange(ref _cycleSucceeded, 0);
-            Interlocked.Exchange(ref _cycleRateLimited, 0);
-            Interlocked.Exchange(ref _cycleErrored, 0);
-            Interlocked.Exchange(ref _cycleSkippedBackoff, 0);
-
-            var sweepTimer = Stopwatch.StartNew();
-            if (enabled.Count > 0)
+            while (!stoppingToken.IsCancellationRequested)
             {
-                var tasks = enabled.Select(token =>
+                var dbTimer = Stopwatch.StartNew();
+
+                using var scope = _scopeFactory.CreateScope();
+                var tokenRepo = scope.ServiceProvider.GetRequiredService<ITokenRepository>();
+                var proxyRepo = scope.ServiceProvider.GetRequiredService<IProxyRepository>();
+
+                var tokens = await tokenRepo.GetAllAsync(stoppingToken);
+                var proxies = await proxyRepo.GetAllAsync(stoppingToken);
+                var quoteAmounts = await tokenRepo.GetAllQuoteAmountsAsync(stoppingToken);
+                var proxyMap = proxies.Where(p => p.Enabled).ToDictionary(p => p.Id);
+
+                var enabled = tokens
+                    .Where(t => t.Enabled && !string.IsNullOrWhiteSpace(t.SolanaMint) && !string.IsNullOrWhiteSpace(t.JupiterInputMint))
+                    .ToList();
+                dbTimer.Stop();
+
+                var next = new Dictionary<Guid, TokenWorkState>(enabled.Count);
+                foreach (var token in enabled)
                 {
                     var proxy = token.ProxyId.HasValue && proxyMap.TryGetValue(token.ProxyId.Value, out var p) ? p : null;
                     var quoteAmount = quoteAmounts.GetValueOrDefault(token.Id, 0.01m);
-                    return FetchTokenQuoteAsync(token, proxy, quoteAmount, stoppingToken);
-                });
-                await Task.WhenAll(tasks);
+                    next[token.Id] = new TokenWorkState { Token = token, Proxy = proxy, QuoteAmount = quoteAmount };
+                }
+                _current = next;
+
+                foreach (var id in next.Keys)
+                {
+                    if (_workers.ContainsKey(id)) continue;
+                    var cts = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                    _workers[id] = (cts, RunTokenWorkerAsync(id, cts.Token));
+                }
+
+                foreach (var id in _workers.Keys)
+                {
+                    if (next.ContainsKey(id)) continue;
+                    if (_workers.TryRemove(id, out var w))
+                    {
+                        w.Cts.Cancel();
+                        w.Cts.Dispose();
+                    }
+                }
+
+                LogSummaryThrottled(enabled, dbTimer.Elapsed);
+
+                await Task.Delay(SupervisorRefreshMs, stoppingToken);
             }
-            sweepTimer.Stop();
-
-            LogCycleSummaryThrottled(enabled, sweepTimer.Elapsed);
-
-            await Task.Delay(PollIntervalMs, stoppingToken);
+        }
+        finally
+        {
+            foreach (var w in _workers.Values)
+                w.Cts.Cancel();
+            try
+            {
+                await Task.WhenAll(_workers.Values.Select(w => w.Loop));
+            }
+            catch (OperationCanceledException)
+            {
+                // expected on shutdown
+            }
         }
     }
 
-    /// <summary>Once a minute: how many tokens are actually enabled, how long
-    /// a full sweep took, what happened to them, and which specific tokens
-    /// are furthest behind on a fresh price — searchable by symbol instead
-    /// of having to reason about the code to guess why one token looks
-    /// stale.</summary>
-    private void LogCycleSummaryThrottled(List<Token> enabled, TimeSpan sweepDuration)
+    /// <summary>The independent per-token loop: fetch, wait, repeat, forever
+    /// (until this token is disabled/removed and the supervisor cancels it).
+    /// Never blocked by any other token's loop.</summary>
+    private async Task RunTokenWorkerAsync(Guid tokenId, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            if (_current.TryGetValue(tokenId, out var state))
+            {
+                await FetchTokenQuoteAsync(state.Token, state.Proxy, state.QuoteAmount, ct);
+            }
+
+            try
+            {
+                await Task.Delay(PollIntervalMs, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>Once a minute: how many tokens are actually enabled, how many
+    /// independent worker loops are running, what happened to them since the
+    /// last summary, and which specific tokens are furthest behind on a
+    /// fresh price — searchable by symbol instead of having to reason about
+    /// the code to guess why one token looks stale.</summary>
+    private void LogSummaryThrottled(List<Token> enabled, TimeSpan dbRefreshDuration)
     {
         var now = DateTime.UtcNow;
         if (now - _lastSummaryLogAt < SummaryLogInterval) return;
         _lastSummaryLogAt = now;
+
+        var succeeded = Interlocked.Exchange(ref _succeededSinceSummary, 0);
+        var rateLimited = Interlocked.Exchange(ref _rateLimitedSinceSummary, 0);
+        var errored = Interlocked.Exchange(ref _erroredSinceSummary, 0);
+        var skippedBackoff = Interlocked.Exchange(ref _skippedBackoffSinceSummary, 0);
 
         var stale = enabled
             .Select(t => new
@@ -152,8 +227,9 @@ public sealed class JupiterWorkerService : BackgroundService
             .ToList();
 
         _logger.LogInformation(
-            "Jupiter sweep: {Enabled} enabled tokens, took {SweepMs}ms, {Succeeded} ok / {RateLimited} rate-limited / {Errored} errored / {SkippedBackoff} skipped (own backoff). Stalest: {Stalest}",
-            enabled.Count, (int)sweepDuration.TotalMilliseconds, _cycleSucceeded, _cycleRateLimited, _cycleErrored, _cycleSkippedBackoff,
+            "Jupiter workers: {Enabled} enabled tokens, {Active} loops running, token-list refresh took {DbMs}ms. Last {IntervalS}s: {Succeeded} ok / {RateLimited} rate-limited / {Errored} errored / {SkippedBackoff} skipped (own backoff). Stalest: {Stalest}",
+            enabled.Count, _workers.Count, (int)dbRefreshDuration.TotalMilliseconds, (int)SummaryLogInterval.TotalSeconds,
+            succeeded, rateLimited, errored, skippedBackoff,
             string.Join(", ", stale));
     }
 
@@ -161,7 +237,7 @@ public sealed class JupiterWorkerService : BackgroundService
     {
         if (_tokenBackoffUntil.TryGetValue(token.Id, out var backoffUntil) && DateTime.UtcNow < backoffUntil)
         {
-            Interlocked.Increment(ref _cycleSkippedBackoff);
+            Interlocked.Increment(ref _skippedBackoffSinceSummary);
             return;
         }
 
@@ -200,7 +276,7 @@ public sealed class JupiterWorkerService : BackgroundService
 
                 if ((int)response.StatusCode == 429)
                 {
-                    Interlocked.Increment(ref _cycleRateLimited);
+                    Interlocked.Increment(ref _rateLimitedSinceSummary);
                     _tokenBackoffUntil[token.Id] = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
                     _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group}) — backing off this token only", token.Symbol, groupKey);
                     return;
@@ -247,7 +323,7 @@ public sealed class JupiterWorkerService : BackgroundService
                 snap.ProxyId = proxy?.Id;
                 snap.ProxyErrorUntilUtc = 0;
                 Interlocked.Increment(ref snap.Sequence);
-                Interlocked.Increment(ref _cycleSucceeded);
+                Interlocked.Increment(ref _succeededSinceSummary);
                 _tokenHealth[token.Id] = (token.Symbol, DateTime.UtcNow, latencyMs);
             }
             finally

@@ -20,8 +20,19 @@ const BUCKET_SECONDS: Record<string, number> = { '5m': 300, '15m': 900, '1h': 36
 const RETENTION_HOURS = 72;
 const HISTORY_CHUNK_HOURS = 24;
 
-interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; }
+interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; synthetic?: boolean; }
 interface LinePoint { time: UTCTimestamp; value: number; }
+
+// Gap-filled bars carry the previous close forward but represent "no data",
+// not real price action — colored distinctly (muted grey) so they read as
+// "nothing happened here" instead of looking like an actual flat candle.
+const GAP_FILL_COLOR = '#3a3b48';
+
+function toCandleData(bar: Bar) {
+  if (!bar.synthetic) return bar;
+  return { time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close,
+    color: GAP_FILL_COLOR, borderColor: GAP_FILL_COLOR, wickColor: GAP_FILL_COLOR };
+}
 
 // A single wildly-off spread reading (bad token data, ticker collision,
 // momentary glitch) stretches the whole price axis to fit it, squashing
@@ -59,7 +70,7 @@ function fillGaps(bars: Bar[], bucketSeconds: number): Bar[] {
     while (t + bucketSeconds < next.time) {
       t += bucketSeconds;
       const prevClose = filled[filled.length - 1].close;
-      filled.push({ time: t as UTCTimestamp, open: prevClose, high: prevClose, low: prevClose, close: prevClose });
+      filled.push({ time: t as UTCTimestamp, open: prevClose, high: prevClose, low: prevClose, close: prevClose, synthetic: true });
     }
     filled.push(next);
   }
@@ -135,7 +146,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
           : { time: bucketStart, open: p.spread_pct, high: p.spread_pct, low: p.spread_pct, close: p.spread_pct };
 
         currentBar.current = bar;
-        candleSeries.current.update(bar);
+        candleSeries.current.update(toCandleData(bar));
 
         const arr = allCandles.current;
         if (arr.length > 0 && arr[arr.length - 1].time === bar.time) arr[arr.length - 1] = bar;
@@ -186,7 +197,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       } else {
         allCandles.current = fillGaps([...older, ...allCandles.current], bucketSeconds);
         earliestLoaded.current = allCandles.current[0].time;
-        candleSeries.current?.setData(allCandles.current);
+        candleSeries.current?.setData(allCandles.current.map(toCandleData));
       }
       loadingMoreHistory.current = false;
     };
@@ -222,7 +233,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       allCandles.current = candles;
 
       if (candles.length > 0) {
-        series.setData(candles);
+        series.setData(candles.map(toCandleData));
         currentBar.current = candles[candles.length - 1];
         earliestLoaded.current = candles[0].time;
         chart.timeScale().fitContent();
