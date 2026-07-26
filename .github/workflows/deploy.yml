@@ -104,6 +104,13 @@ jobs:
               docker rm onix-app-1 2>/dev/null || true
             fi
 
+            echo "Syncing nginx site config from deploy/nginx/ (see deploy/nginx/README.md for one-time server setup)..."
+            if sudo -n /usr/local/bin/onix-sync-nginx.sh; then
+              echo "nginx config synced."
+            else
+              echo "WARNING: onix-sync-nginx.sh missing or failed — nginx config was NOT updated from the repo this deploy. See deploy/nginx/README.md for the one-time setup. Not fatal, continuing."
+            fi
+
             echo "Deploying admin panel (single instance, brief restart is fine — internal tool, not on the public blue/green path)..."
             docker compose build admin
             docker compose up -d admin

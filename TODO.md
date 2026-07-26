@@ -5,28 +5,16 @@
 
 ## Критическое
 
-- [ ] **Добавить nginx location для `/admin` на сервере.** Код готов
-      (см. "Сделано" — `PathBase`/`<base href>`/относительные ссылки), но
-      реальный nginx-конфиг сервера не в этом репозитории — я его не вижу
-      и не могу отредактировать вслепую. Нужно руками добавить в тот же
-      server-block, что и основной домен:
-      ```nginx
-      location /admin/ {
-          proxy_pass http://127.0.0.1:5050;
-          proxy_http_version 1.1;
-          proxy_set_header Upgrade $http_upgrade;
-          proxy_set_header Connection "upgrade";
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-      }
-      ```
-      Важно: `proxy_pass` **без** пути после порта (не
-      `http://127.0.0.1:5050/proxies` и не с завершающим `/`) — иначе nginx
-      обрежет префикс `/admin`, а серверный `UsePathBase("/admin")` его
-      ждёт целиком. Upgrade/Connection — обязательны, Blazor Server держит
-      постоянный WebSocket (SignalR circuit), без них интерфейс будет
-      вечно "reconnecting". После добавления — `nginx -t && sudo systemctl
-      reload nginx` (или эквивалент на сервере).
+- [ ] **Разовая настройка на сервере: скрипт синхронизации nginx.**
+      nginx-конфиг (`deploy/nginx/onix-scanner.it.conf`, уже с `location
+      /admin/` внутри) теперь версионируется в репозитории и синкается на
+      каждом деплое автоматически (`deploy.yml` → `onix-sync-nginx.sh`) —
+      это закрывает "каждый раз руками лезть на сервер" для будущих правок
+      nginx. Но сам скрипт синхронизации и sudoers-разрешение для него на
+      сервере — разовая ручная настройка, я не могу её сделать (нет SSH-
+      доступа). Точные команды — **`deploy/nginx/README.md`**. Пока это не
+      сделано, `deploy.yml` просто пишет warning в лог и не падает — старый
+      конфиг на сервере остаётся как есть.
 
 ## Важное
 
