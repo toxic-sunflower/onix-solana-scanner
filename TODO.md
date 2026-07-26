@@ -5,50 +5,20 @@
 
 ## Критическое
 
-- [ ] **Коллизия тикеров Jupiter↔BingX даёт бессмысленный спред** —
-      `TokenSyncService.SyncTokensAsync` сопоставляет токен Jupiter с парой
-      BingX только по строковому символу (`bingxSymbols.Contains(jt.Symbol)`,
-      [TokenSyncService.cs:74](src/Onix.Scanner.Api/Services/TokenSyncService.cs:74)).
-      Подтверждено вживую: токен AVA показывает спред +1899% (CEX $0.16 vs
-      DEX $0.008) — похоже на то, что BingX AVA-USDT и солана-токен AVA из
-      выдачи Jupiter (`tokens/v2/search?query=`, фаззи-поиск) — это разные
-      активы с совпавшим тикером. Нужно сопоставлять по mint-адресу/контракту
-      или вручную вайтлистить, а не по голому символу.
-- [ ] **Proxy Test заглушка вернулась/не проверено после последних правок** —
-      `POST /admin/proxies/{id}/test` — реализация есть (`ProxyTester.cs`),
-      сверить что не регрессировало.
-- [ ] **Realtime alert-порог (`token.alert`) захардкожен** на 5%
-      (`SpreadCalculator.DefaultAlertThresholdPct`) вместо пользовательского
-      `MinimalSpreadPct`/`AlertThresholdPct` — веб-алерт и Telegram-алерт могут
-      расходиться по порогу для одного и того же пользователя.
+*(пусто — всё закрыто в этом заходе, см. "Сделано")*
 
 ## Важное
 
-- [ ] **Timezone selector на графике** (ТЗ п.12.2) — `ChartPage` не передаёт
-      пользовательскую timezone в запрос графика, всегда UTC на сервере, хотя
-      `UserSettings.Timezone` существует и настраивается.
-- [ ] **Фильтр «спред выше X»** (ТЗ п.11.3) — сейчас только фильтр по статусам.
-- [ ] **API документация** — описание всех endpoints.
-- [ ] **Proxy Strict/Fallback policy** (ТЗ раздел 8.3) — нужна настройка
-      "Strict Proxy" vs "Fallback to Shared IP" на уровне токена/прокси; поля
-      в модели `Proxy`/`Token` пока нет. Сейчас при ошибке прокси воркер просто
-      помечает токен `ProxyError`, fallback на shared IP не происходит
-      (прокси жёстко привязана к токену через `Token.ProxyId`). Нужно завести
-      поле и обсудить дефолт.
-- [ ] **DELETE-эндпоинты** для токенов и прокси в `AdminController`
-      (сейчас только Create/Patch/GetAll).
+*(пусто — всё закрыто в этом заходе, см. "Сделано")*
 
 ## Среднее
 
-- [ ] **Метрики** — Prometheus/OpenTelemetry (ТЗ п.19.2).
-- [ ] **Mint Address change logging** (ТЗ п.5.3).
-- [ ] **Per-token BingX state** — connected, last_message_at, reconnect_count.
+- [ ] **Метрики** — Prometheus/OpenTelemetry (ТЗ п.19.2). Отдельная большая
+      задача (выбор библиотеки, инструментирование каждого сервиса,
+      `/metrics` эндпоинт) — сознательно отложена, не делалась в этом заходе.
 - [ ] **Telegram bot token не шифруется** — берётся из конфигурации/env в
       открытом виде. Ожидаемо для серверного секрета вне БД, но стоит явно
       зафиксировать как решение, а не пробел.
-- [ ] **Мёртвый код `LoginToken`** (модель/таблица/репозиторий:
-      `CreateLoginTokenAsync`/`ConsumeLoginTokenAsync`) — не часть текущего
-      auth-флоу (OAuth+PKCE), стоит убрать отдельным заходом.
 
 ## Продуктовые фичи (не начато)
 
@@ -69,11 +39,10 @@
 ### Security & Recovery
 - [ ] **Что если потерял Telegram?** — восстановление доступа через
       резервные коды/email при регистрации.
-- [ ] **Админка** — веб-панель для управления пользователями/токенами,
-      мониторинг системы (частично есть `AdminController` — оценить, чего не
-      хватает для полноценной веб-панели).
 - [ ] **Fallback-доступ к админке** — резервный email + TOTP, exclude-коды,
-      доверенные устройства (по аналогии с платёжными системами).
+      доверенные устройства (по аналогии с платёжными системами). Актуально
+      теперь, когда админка (`Onix.Scanner.Admin`) реально существует —
+      см. примечание в "Сделано".
 
 ## Сделано
 
@@ -83,16 +52,17 @@
 - [x] SpreadCalculator — формула, статусы, QualityStatus; дедуп единой
       реализации во всех местах (`Core.SpreadCalculator.CalculateSpread`)
 - [x] Per-token proxy — HTTP/SOCKS5, шифрование паролей AES-256-CBC
-- [x] SignalR — token.quote, token.status, token.alert, version + event_id
-- [x] Web Dashboard — карточки, сортировка, фильтр статусов, SignalR
+- [x] Web Dashboard — карточки, сортировка, фильтр статусов
 - [x] Chart Page — OHLC 5m/15m/1h, Lightweight Charts v5. Live SSE-обновление
       текущего бара + line-серии (не только one-shot REST). Ленивая подгрузка
       истории при скролле к краю (до границы retention 72ч). Tooltip
       time/O/H/L/C/samples (ТЗ п.12.2, через `subscribeCrosshairMove`).
       Кнопка "Reset scale" (ТЗ п.12.3 "возможность reset scale"). Пропуски
       данных НЕ заполняются фиктивными свечами — ТЗ п.12.3 прямо запрещает
-      ("при samples = 0 свеча отсутствует"); был неверный gap-fill фикс,
-      откачен после сверки с ТЗ.
+      ("при samples = 0 свеча отсутствует"). Timezone-селектор (UTC/Moscow/
+      London/New York/Tokyo/Shanghai) — бакетинг остаётся в UTC на сервере
+      (без DST-неоднозначностей), конвертация только в отображении
+      (`tickMarkFormatter`/tooltip через `Intl.DateTimeFormat`).
 - [x] JupiterWorkerService — независимый persistent-цикл на каждый токен
       (ТЗ п.7.1 "один токен = один независимый worker"), супервизор раз в
       секунду батчем обновляет токены/прокси/суммы без роста нагрузки на БД.
@@ -108,7 +78,11 @@
 - [x] .NET Aspire AppHost — PostgreSQL контейнер, Dashboard
 - [x] Решение .sln + .slnx — Rider, VS, CLI
 - [x] Proxy Test (`POST /admin/proxies/{id}/test`) — реальная проверка через
-      прокси к Jupiter API, latency, обновление `Proxy.Status/LatencyMs`
+      прокси к Jupiter API, latency, обновление `Proxy.Status/LatencyMs`.
+      Перепроверено — не регрессировало, логика (`ProxyTester`) не тронута,
+      только перенесена из `Api.Services` в `Core` (без внешней ASP.NET
+      Core-зависимости — самодостаточный статический класс), чтобы админка
+      могла её переиспользовать без ссылки на весь Api-проект.
 - [x] Статус `ProxyError` — `TokenSnapshot.ProxyErrorUntilUtc`, TTL 30с,
       проверяется первым в `SpreadCalculator.ComputeStatus`
 - [x] Изоляция per-token воркеров в `JupiterWorkerService` — независимый
@@ -160,3 +134,66 @@
       через `ensureFreshToken`, т.к. нативный автореконнект `EventSource` бы
       слал протухший токен вечно). `@microsoft/signalr` убран из
       `package.json`.
+- [x] **Коллизия тикеров Jupiter↔BingX (баг AVA, +1899% спред).**
+      Подтверждено вживую: BingX AVA-USDT и Jupiter-токен AVA, скорее всего,
+      разные проекты — совпал только тикер. ТЗ п.5 прямо требует: при
+      неоднозначном тикере токен не должен запускаться автоматически,
+      статус "Mapping Required", подтверждение вручную. Реализовано:
+      `Token.RequiresMapping` (новое поле), `TokenSyncService` больше не
+      авто-enable'ит новые CEX-совпадения — только `RequiresMapping=true,
+      Enabled=false`. `TokenRepository.UpsertBatchAsync` больше не
+      перезаписывает `Enabled`/`RequiresMapping` при повторном sync'е
+      (admin-owned после первого создания записи; авто-отключение остаётся
+      только если токен реально делистнут с BingX).
+      `SpreadCalculator.ComputeStatus` возвращает `MappingRequired` первым
+      делом. В админке (`Tokens.razor`) — секция "требуют подтверждения" с
+      кнопками Confirm/Reject
+      (`POST /admin/tokens/{id}/confirm-mapping|reject-mapping`).
+- [x] **Proxy Strict/Fallback policy** (ТЗ 8.3). `Token.ProxyFallbackPolicy`
+      (`Strict` по умолчанию — ТЗ прямо требует не переходить на shared IP
+      незаметно). `JupiterWorkerService.FetchAndApplyAsync` — при
+      реальном сбое прокси (не 429, не кривой ответ Jupiter — это не
+      прокси-ошибка) и политике `FallbackToSharedIp` делает один retry через
+      shared IP. Редактируется в админке (Tokens.razor, колонка "Fallback
+      policy").
+- [x] **DELETE-эндпоинты** для токенов и прокси в `AdminController`
+      (`DELETE /admin/tokens/{id}`, `DELETE /admin/proxies/{id}`) — оба
+      репозитория уже поддерживали `DeleteAsync`, не хватало только роутов.
+- [x] **Realtime alert-порог** — веб-алерт (визуальный 🚨 на `TokenCard`)
+      теперь берёт `MinimalSpreadPct` из `GET /api/v1/settings` (тот же
+      источник правды, что и настройки пользователя), а не захардкоженный
+      `SpreadCalculator.DefaultAlertThresholdPct`. `token.alert` SSE-событие
+      как было — фронтенд его и раньше не слушал (проверено), поэтому
+      исправление сделано клиентски по `token.quote`, без риска сломать
+      широковещательную SSE-группу.
+- [x] **Timezone selector на графике** (ТЗ п.12.2) — см. пункт Chart Page выше.
+- [x] **Фильтр «спред выше X»** (ТЗ п.11.3) — числовое поле на Dashboard
+      рядом с All/Positive spread.
+- [x] **API документация** — [API.md](API.md), по каждому контроллеру:
+      метод, путь, требуемая авторизация, назначение, нетривиальное
+      поведение.
+- [x] **Мёртвый код `LoginToken`** — модель, `DbSet`, EF-конфигурация,
+      `CreateLoginTokenAsync`/`ConsumeLoginTokenAsync` убраны (ни одного
+      реального вызова не было — только определения). Миграция
+      `DropLoginTokens`.
+- [x] **Per-token BingX state** (ТЗ п.6.3) — `last_message_at`/
+      `last_ask_price` и так жили в snapshot pool per-token; добавлено то,
+      чего не было: `connected`/`reconnect_count` на уровне соединения
+      (один multiplexed WebSocket на все символы — TZ хочет "независимое
+      состояние" per pair, но физически это одно соединение, так что
+      connected/reconnects по природе на уровне соединения, а не пары) +
+      раз в минуту сводка в лог (searchable), тот же паттерн, что и у
+      Jupiter-воркера.
+- [x] **Админка (`Onix.Scanner.Admin`, Blazor Server).** Реально
+      существует и работает, проверено локально (Docker Postgres + два
+      `dotnet run`): логин по хардкод-паролю (cookie-auth), страница
+      Tokens (Mapping Required confirm/reject, enable-toggle, proxy
+      assignment, fallback policy, quote amount, ручное
+      добавление/удаление, диагностика ticks/1h из БД напрямую), страница
+      Proxies (CRUD + Test, пароли шифруются через тот же
+      `IProxyRepository`/`AesEncryptionService`, что и основной API),
+      страница Settings (read-only обзор Jupiter/BingX/Freshness/Telegram/
+      Storage — большинство значений заданы в коде/env осознанно, не
+      DB-backed рантайм-конфиг). **Не закоммичено** — логин/пароль
+      захардкожены (`Program.cs`), проект в `.gitignore`
+      (`src/Onix.Scanner.Admin/`) до переноса credentials в env/секреты.

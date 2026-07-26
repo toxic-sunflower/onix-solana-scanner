@@ -12,15 +12,21 @@ interface Props {
   isFavorite?: boolean;
   onFavorite?: (tokenId: string, isFavorite: boolean) => void;
   onBlacklist?: (tokenId: string) => void;
+  /** User's own MinimalSpreadPct (GET /api/v1/settings) — same field
+   * Telegram alerts are meant to key off, so the web "alert" highlight
+   * actually matches what the user configured instead of a hardcoded
+   * server-side constant nobody could see or control. */
+  alertThreshold?: number;
 }
 
 export default function TokenCard({
   token, flash, ticks, onClickChart, onClickHistory,
-  isPinned, onPin, isFavorite, onFavorite, onBlacklist,
+  isPinned, onPin, isFavorite, onFavorite, onBlacklist, alertThreshold,
 }: Props) {
   const hasBingx = (token.bingxAskPrice ?? 0) > 0;
   const hasJupiter = (token.jupiterBuyPrice ?? 0) > 0;
   const hasBoth = hasBingx && hasJupiter;
+  const isAlerting = alertThreshold != null && (token.spreadPct ?? 0) >= alertThreshold;
   const [flashClass, setFlashClass] = useState('');
   const prevSpread = useRef(token.spreadPct);
 
@@ -41,10 +47,11 @@ export default function TokenCard({
   const recentLog = ticks?.slice(0, 6) ?? [];
 
   return (
-    <div className={`bg-[#16171d] rounded-lg border border-[#2a2b36] p-3.5 flex flex-col gap-2.5 slide-in ${flashClass} group`}>
+    <div className={`bg-[#16171d] rounded-lg border p-3.5 flex flex-col gap-2.5 slide-in ${flashClass} group ${isAlerting ? 'border-[#f59e0b]' : 'border-[#2a2b36]'}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2.5">
           <span className={`w-2.5 h-2.5 rounded-full ${hasBoth ? 'bg-[#22c55e]' : hasBingx || hasJupiter ? 'bg-[#f59e0b] shimmer' : 'bg-[#64748b]'}`} />
+          {isAlerting && <span title={`Spread >= ${alertThreshold}% (your alert threshold)`}>🚨</span>}
           <span className="font-bold text-base text-[#f1f5f9]">{token.symbol}</span>
           {token.name && <span className="text-xs text-[#64748b] hidden sm:inline">{token.name}</span>}
           {token.solanaMint && <span className="text-[10px] text-[#475569] font-mono hidden md:inline">{token.solanaMint}</span>}

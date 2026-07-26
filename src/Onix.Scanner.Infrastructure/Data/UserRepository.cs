@@ -153,29 +153,6 @@ public class UserRepository : IUserRepository
         await _db.BlacklistedJtis.Where(b => b.ExpiresAt <= DateTime.UtcNow).ExecuteDeleteAsync(ct);
     }
 
-    public async Task<LoginToken> CreateLoginTokenAsync(Guid userId, TimeSpan lifetime, CancellationToken ct = default)
-    {
-        var loginToken = new LoginToken
-        {
-            UserId = userId,
-            Token = Guid.NewGuid().ToString(),
-            ExpiresAt = DateTime.UtcNow.Add(lifetime),
-        };
-        _db.LoginTokens.Add(loginToken);
-        await _db.SaveChangesAsync(ct);
-        return loginToken;
-    }
-
-    public async Task<LoginToken?> ConsumeLoginTokenAsync(string token, CancellationToken ct = default)
-    {
-        var loginToken = await _db.LoginTokens
-            .FirstOrDefaultAsync(t => t.Token == token && !t.IsUsed && t.ExpiresAt > DateTime.UtcNow, ct);
-        if (loginToken is null) return null;
-
-        loginToken.IsUsed = true;
-        await _db.SaveChangesAsync(ct);
-        return loginToken;
-    }
 
     public async Task<List<UserSubscriber>> GetSubscribersAsync(Guid tokenId, CancellationToken ct = default)
     {

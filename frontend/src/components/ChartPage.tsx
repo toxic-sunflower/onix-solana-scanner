@@ -25,6 +25,19 @@ const HISTORY_CHUNK_HOURS = 24;
 // flat bars. Do not gap-fill.
 interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; }
 
+// TZ 12.2 "Выбор часового пояса; данные в БД всегда хранятся в UTC" — bucket
+// boundaries stay computed in UTC server-side (unambiguous, no DST edge
+// cases); only the axis/tooltip *display* is converted to the chosen zone.
+const TIMEZONES = ['UTC', 'Europe/Moscow', 'Europe/London', 'America/New_York', 'Asia/Tokyo', 'Asia/Shanghai'] as const;
+
+function formatInTz(epochSeconds: number, tz: string, opts: Intl.DateTimeFormatOptions): string {
+  try {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: tz, ...opts }).format(new Date(epochSeconds * 1000));
+  } catch {
+    return new Intl.DateTimeFormat('en-GB', { timeZone: 'UTC', ...opts }).format(new Date(epochSeconds * 1000));
+  }
+}
+
 export default function ChartPage({ tokenId, onBack }: Props) {
   const candleRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
@@ -43,8 +56,16 @@ export default function ChartPage({ tokenId, onBack }: Props) {
   const intervalRef = useRef(selectedInterval);
   const [token, setToken] = useState<UserTokenDto | null>(null);
   const [activeTab, setActiveTab] = useState<'candles' | 'spreadline'>('candles');
+  const [timezone, setTimezone] = useState<string>('UTC');
 
   useEffect(() => { intervalRef.current = selectedInterval; }, [selectedInterval]);
+
+  useEffect(() => {
+    authFetch('/api/v1/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.timezone) setTimezone(data.timezone); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     authFetch(`/api/v1/tokens/${tokenId}`)
@@ -119,7 +140,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     const to = new Date().toISOString();
 
     const fetchChart = (fromIso: string, toIso: string) =>
-      authFetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${fromIso}&to=${toIso}`)
+      authFetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${fromIso}&to=${toIso}&timezone=${encodeURIComponent(timezone)}`)
         .then(res => res.ok ? res.json() : Promise.resolve({ candles: [] }))
         .then((data: Pick<ChartResponse, 'candles'>) => data.candles ?? []);
 
@@ -163,7 +184,11 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         height: 400,
         layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
         grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
-        timeScale: { timeVisible: true, borderColor: '#374151' },
+        timeScale: {
+          timeVisible: true,
+          borderColor: '#374151',
+          tickMarkFormatter: (t: number) => formatInTz(t, timezone, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }),
+        },
         rightPriceScale: { borderColor: '#374151' },
       });
       candleChart.current = chart;
@@ -197,12 +222,12 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         if (!param.point || !bar) { tt.style.display = 'none'; return; }
 
         const samples = samplesByTime.current.get(param.time as number) ?? 0;
-        const d = new Date((param.time as number) * 1000);
+        const label = formatInTz(param.time as number, timezone, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false });
         tt.style.display = 'block';
         tt.style.left = `${Math.min(param.point.x + 12, el.clientWidth - 160)}px`;
         tt.style.top = `${param.point.y + 12}px`;
         tt.innerHTML = `
-          <div class="text-[#94a3b8]">${d.toISOString().replace('T', ' ').slice(0, 16)} UTC</div>
+          <div class="text-[#94a3b8]">${label} (${timezone})</div>
           <div>O: <span class="text-[#f1f5f9]">${bar.open.toFixed(4)}</span> H: <span class="text-[#f1f5f9]">${bar.high.toFixed(4)}</span></div>
           <div>L: <span class="text-[#f1f5f9]">${bar.low.toFixed(4)}</span> C: <span class="text-[#f1f5f9]">${bar.close.toFixed(4)}</span></div>
           <div class="text-[#64748b]">samples: ${samples}</div>
@@ -231,7 +256,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       candleChart.current = null;
       candleSeries.current = null;
     };
-  }, [tokenId, selectedInterval, activeTab]);
+  }, [tokenId, selectedInterval, activeTab, timezone]);
 
   useEffect(() => {
     const el = lineRef.current;
@@ -246,7 +271,11 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       height: 200,
       layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
       grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
-      timeScale: { timeVisible: true, borderColor: '#374151' },
+      timeScale: {
+        timeVisible: true,
+        borderColor: '#374151',
+        tickMarkFormatter: (t: number) => formatInTz(t, timezone, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }),
+      },
       rightPriceScale: { borderColor: '#374151' },
     });
     lineChart.current = chart;
@@ -277,7 +306,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       lineChart.current = null;
       lineSeries.current = null;
     };
-  }, [tokenId, activeTab]);
+  }, [tokenId, activeTab, timezone]);
 
   useEffect(() => () => {
     candleChart.current?.remove();
@@ -314,6 +343,10 @@ export default function ChartPage({ tokenId, onBack }: Props) {
           <button key={i} onClick={() => setSelectedInterval(i)}
             className={`px-3 py-1 rounded text-sm ${selectedInterval === i ? 'bg-[#1e1f28] text-[#f1f5f9]' : 'bg-transparent text-[#64748b] hover:text-[#94a3b8]'}`}>{i}</button>
         ))}
+        <select value={timezone} onChange={e => setTimezone(e.target.value)}
+          className="px-2 py-1 rounded text-sm bg-[#1e1f28] text-[#94a3b8] border border-[#2a2b36]">
+          {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+        </select>
         <button onClick={resetScale}
           className="ml-auto px-3 py-1 rounded text-sm bg-[#1e1f28] text-[#94a3b8] hover:text-[#f1f5f9] transition-colors">Reset scale</button>
       </div>

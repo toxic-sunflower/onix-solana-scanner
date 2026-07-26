@@ -31,9 +31,18 @@ export default function Dashboard({ onNavigate }: Props) {
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
+  const [minSpread, setMinSpread] = useState('');
+  const [alertThreshold, setAlertThreshold] = useState<number | undefined>(undefined);
   const [now, setNow] = useState(Date.now());
   const [ticks, setTicks] = useState<Map<string, TickPoint[]>>(new Map());
   const flashMap = useRef<Map<string, 'up' | 'down' | null>>(new Map());
+
+  useEffect(() => {
+    authFetch('/api/v1/settings')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (data?.minimalSpreadPct != null) setAlertThreshold(data.minimalSpreadPct); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -156,12 +165,14 @@ export default function Dashboard({ onNavigate }: Props) {
       list = list.filter(t => t.symbol.toLowerCase().includes(q) || (t.name ?? '').toLowerCase().includes(q));
     }
     if (filter === 'positive') list = list.filter(t => t.spreadPct != null && t.spreadPct > 0);
+    const minSpreadNum = parseFloat(minSpread);
+    if (!Number.isNaN(minSpreadNum)) list = list.filter(t => t.spreadPct != null && t.spreadPct >= minSpreadNum);
     list.sort((a, b) => {
       if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return (b.spreadPct ?? -Infinity) - (a.spreadPct ?? -Infinity);
     });
     return list;
-  }, [allTokens, filter, search]);
+  }, [allTokens, filter, search, minSpread]);
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
@@ -180,6 +191,9 @@ export default function Dashboard({ onNavigate }: Props) {
             {v === 'all' ? 'All' : 'Positive spread'}
           </button>
         ))}
+        <input type="number" step="0.1" placeholder="Spread ≥ X%"
+          value={minSpread} onChange={e => setMinSpread(e.target.value)}
+          className="px-2.5 py-1 bg-[#16171d] border border-[#2a2b36] rounded text-xs text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] w-28" />
         <input type="text" placeholder="Search..."
           value={search} onChange={e => setSearch(e.target.value)}
           className="ml-auto px-2.5 py-1 bg-[#16171d] border border-[#2a2b36] rounded text-xs text-[#f1f5f9] placeholder-[#64748b] focus:outline-none focus:border-[#f59e0b] w-36" />
@@ -195,6 +209,7 @@ export default function Dashboard({ onNavigate }: Props) {
             isFavorite={t.isFavorite}
             onFavorite={doFavorite}
             onBlacklist={doBlacklist}
+            alertThreshold={alertThreshold}
             onClickChart={(id) => onNavigate('chart', id)}
             onClickHistory={(id) => onNavigate('history', id)} />
         ))}

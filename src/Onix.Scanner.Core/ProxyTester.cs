@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using Onix.Scanner.Shared.Models;
 
-namespace Onix.Scanner.Api.Services;
+namespace Onix.Scanner.Core;
 
 public static class ProxyTester
 {

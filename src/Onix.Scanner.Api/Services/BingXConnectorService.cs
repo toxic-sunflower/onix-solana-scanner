@@ -17,6 +17,16 @@ public sealed class BingXConnectorService : BackgroundService
 
     private readonly Dictionary<string, (int Index, decimal Multiplier)> _symbolMap = new(StringComparer.OrdinalIgnoreCase);
 
+    // TZ п.6.3: "Каждая пара должна иметь независимое состояние: connected,
+    // last_message_at, last_ask_price, reconnect_count." last_message_at and
+    // last_ask_price already live per-token in the shared snapshot pool
+    // (BingxTimestampUtc/BingxAskPriceRaw) — connected/reconnect_count are
+    // connection-level here (one shared multiplexed WebSocket subscribes all
+    // symbols, so there's one real "connected" state, not N independent
+    // sockets). Tracked for the periodic summary log below.
+    private volatile bool _connected;
+    private int _reconnectCount;
+
     public BingXConnectorService(
         ITokenSnapshotPool snapshotPool,
         IServiceScopeFactory scopeFactory,
@@ -41,13 +51,50 @@ public sealed class BingXConnectorService : BackgroundService
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BingX connector crashed. Reconnecting in {Delay}s", backoff.TotalSeconds);
+                _connected = false;
+                _reconnectCount++;
+                _logger.LogError(ex, "BingX connector crashed (reconnect #{Count}). Reconnecting in {Delay}s",
+                    _reconnectCount, backoff.TotalSeconds);
                 await Task.Delay(backoff, stoppingToken);
                 backoff = backoff.TotalSeconds < 60
                     ? backoff * 2 + TimeSpan.FromMilliseconds(Random.Shared.Next(0, 1000))
                     : TimeSpan.FromSeconds(60);
             }
         }
+    }
+
+    private DateTime _lastSummaryLogAt = DateTime.MinValue;
+    private static readonly TimeSpan SummaryLogInterval = TimeSpan.FromSeconds(60);
+
+    /// <summary>Per-symbol last_message_at/last_ask_price already live in
+    /// the shared snapshot pool; this just makes the connection-level state
+    /// (connected, reconnect_count) and per-symbol staleness searchable in
+    /// logs, same pattern as JupiterWorkerService's summary. Called from
+    /// inside the receive loop, throttled to once a minute — a blocking
+    /// ReceiveAsync loop while healthy never "returns" to any outer
+    /// finally/catch, so this can't live there without waiting for a
+    /// disconnect.</summary>
+    private void LogHealthSummaryThrottled()
+    {
+        var now = DateTime.UtcNow;
+        if (now - _lastSummaryLogAt < SummaryLogInterval) return;
+        _lastSummaryLogAt = now;
+        var nowTicks = now.Ticks;
+        var stale = _symbolMap
+            .Select(kv =>
+            {
+                var snap = _snapshotPool.ReadSnapshot(kv.Value.Index);
+                var ageMs = snap.BingxTimestampUtc == 0 ? (long?)null : (nowTicks - snap.BingxTimestampUtc) / TimeSpan.TicksPerMillisecond;
+                return (Symbol: kv.Key, AgeMs: ageMs);
+            })
+            .OrderByDescending(x => x.AgeMs ?? long.MaxValue)
+            .Take(5)
+            .Select(x => x.AgeMs is null ? $"{x.Symbol}=never" : $"{x.Symbol}={x.AgeMs}ms")
+            .ToList();
+
+        _logger.LogInformation(
+            "BingX connector: connected={Connected}, {Symbols} symbols subscribed, reconnects={ReconnectCount}. Stalest: {Stalest}",
+            _connected, _symbolMap.Count, _reconnectCount, string.Join(", ", stale));
     }
 
     private async Task RunAsync(CancellationToken ct)
@@ -74,6 +121,7 @@ public sealed class BingXConnectorService : BackgroundService
         using var ws = new ClientWebSocket();
         _logger.LogInformation("Connecting to BingX at {Url}", WsUrl);
         await ws.ConnectAsync(new Uri(WsUrl), ct);
+        _connected = true;
         _logger.LogInformation("Connected to BingX");
 
         foreach (var symbol in _symbolMap.Keys)
@@ -97,10 +145,12 @@ public sealed class BingXConnectorService : BackgroundService
 
             if (result.MessageType == WebSocketMessageType.Close)
             {
+                _connected = false;
                 _logger.LogWarning("BingX WebSocket closed: {Status}", result.CloseStatus);
                 break;
             }
 
+            LogHealthSummaryThrottled();
             messageBuffer.Write(buffer, 0, result.Count);
 
             if (result.EndOfMessage)

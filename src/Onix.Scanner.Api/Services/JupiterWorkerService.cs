@@ -4,6 +4,7 @@ using System.Net;
 using System.Text.Json;
 using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
+using Onix.Scanner.Shared;
 using Onix.Scanner.Shared.Models;
 
 namespace Onix.Scanner.Api.Services;
@@ -271,60 +272,27 @@ public sealed class JupiterWorkerService : BackgroundService
             var httpClient = proxy is not null ? CreateProxyClient(proxy) : SharedHttp;
             try
             {
-                var sw = Stopwatch.StartNew();
-                using var response = await httpClient.GetAsync(url, ct);
-
-                if ((int)response.StatusCode == 429)
+                try
                 {
-                    Interlocked.Increment(ref _rateLimitedSinceSummary);
-                    _tokenBackoffUntil[token.Id] = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
-                    _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group}) — backing off this token only", token.Symbol, groupKey);
-                    return;
+                    await FetchAndApplyAsync(token, httpClient, proxy?.Id, url, groupKey, ct);
                 }
-
-                var latencyMs = (int)sw.ElapsedMilliseconds;
-                var json = await response.Content.ReadAsStringAsync(ct);
-
-                if (!response.IsSuccessStatusCode)
+                catch (Exception ex) when (proxy is not null
+                    && token.ProxyFallbackPolicy == ProxyFallbackPolicy.FallbackToSharedIp
+                    && !ct.IsCancellationRequested)
                 {
-                    LogFailureThrottled(token, $"HTTP {(int)response.StatusCode} from {url} — body: {Truncate(json)}");
-                    return;
+                    // TZ п.8.3: only tokens explicitly opted into
+                    // FallbackToSharedIp get this — Strict (the default)
+                    // stays on ProxyError instead of silently using the
+                    // shared IP. This only fires for actual proxy
+                    // connectivity failures (exceptions thrown by
+                    // GetAsync itself); a 429 or a malformed Jupiter
+                    // response means the proxy worked fine, so those are
+                    // handled inside FetchAndApplyAsync without throwing.
+                    _logger.LogWarning(ex,
+                        "Proxy failed for {Symbol} — falling back to shared IP (FallbackToSharedIp policy)",
+                        token.Symbol);
+                    await FetchAndApplyAsync(token, SharedHttp, null, url, "__shared(fallback)", ct);
                 }
-
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                if (!root.TryGetProperty("inAmount", out var inEl) || !root.TryGetProperty("outAmount", out var outEl))
-                {
-                    LogFailureThrottled(token, $"response missing inAmount/outAmount — body: {Truncate(json)}");
-                    return;
-                }
-
-                if (!long.TryParse(inEl.GetString(), out var inAtomic) || !long.TryParse(outEl.GetString(), out var outAtomic))
-                {
-                    LogFailureThrottled(token, $"inAmount/outAmount not parseable as long — body: {Truncate(json)}");
-                    return;
-                }
-                if (inAtomic <= 0 || outAtomic <= 0) return;
-
-                var inAmount = inAtomic / (decimal)Math.Pow(10, token.JupiterInputDecimals);
-                var outAmount = outAtomic / (decimal)Math.Pow(10, token.Decimals);
-                var buyPrice = inAmount / outAmount;
-                if (buyPrice <= 0) return;
-
-                var scaled = buyPrice * 1e18m;
-                if (scaled > long.MaxValue || scaled < long.MinValue) return;
-
-                var idx = _snapshotPool.GetOrAddIndex(token.Id);
-                ref var snap = ref _snapshotPool.GetSnapshot(idx);
-                snap.JupiterBuyPriceRaw = (long)scaled;
-                snap.JupiterTimestampUtc = DateTime.UtcNow.Ticks;
-                snap.JupiterLatencyMs = latencyMs;
-                snap.ProxyId = proxy?.Id;
-                snap.ProxyErrorUntilUtc = 0;
-                Interlocked.Increment(ref snap.Sequence);
-                Interlocked.Increment(ref _succeededSinceSummary);
-                _tokenHealth[token.Id] = (token.Symbol, DateTime.UtcNow, latencyMs);
             }
             finally
             {
@@ -350,6 +318,70 @@ public sealed class JupiterWorkerService : BackgroundService
         {
             limiter.Concurrency.Release();
         }
+    }
+
+    /// <summary>Does the actual GET + parse + snapshot write for one quote
+    /// attempt via the given client. 429s and malformed Jupiter responses
+    /// are handled here and return normally (the proxy itself worked fine in
+    /// both cases) — only a genuine exception from GetAsync (connectivity
+    /// failure) propagates, which is what triggers the Strict/Fallback
+    /// decision in the caller.</summary>
+    private async Task FetchAndApplyAsync(Token token, HttpClient httpClient, Guid? proxyId, string url, string groupKey, CancellationToken ct)
+    {
+        var sw = Stopwatch.StartNew();
+        using var response = await httpClient.GetAsync(url, ct);
+
+        if ((int)response.StatusCode == 429)
+        {
+            Interlocked.Increment(ref _rateLimitedSinceSummary);
+            _tokenBackoffUntil[token.Id] = DateTime.UtcNow.AddSeconds(Random.Shared.Next(15, 31));
+            _logger.LogWarning("Jupiter rate limited for {Symbol} (group {Group}) — backing off this token only", token.Symbol, groupKey);
+            return;
+        }
+
+        var latencyMs = (int)sw.ElapsedMilliseconds;
+        var json = await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            LogFailureThrottled(token, $"HTTP {(int)response.StatusCode} from {url} — body: {Truncate(json)}");
+            return;
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        if (!root.TryGetProperty("inAmount", out var inEl) || !root.TryGetProperty("outAmount", out var outEl))
+        {
+            LogFailureThrottled(token, $"response missing inAmount/outAmount — body: {Truncate(json)}");
+            return;
+        }
+
+        if (!long.TryParse(inEl.GetString(), out var inAtomic) || !long.TryParse(outEl.GetString(), out var outAtomic))
+        {
+            LogFailureThrottled(token, $"inAmount/outAmount not parseable as long — body: {Truncate(json)}");
+            return;
+        }
+        if (inAtomic <= 0 || outAtomic <= 0) return;
+
+        var inAmount = inAtomic / (decimal)Math.Pow(10, token.JupiterInputDecimals);
+        var outAmount = outAtomic / (decimal)Math.Pow(10, token.Decimals);
+        var buyPrice = inAmount / outAmount;
+        if (buyPrice <= 0) return;
+
+        var scaled = buyPrice * 1e18m;
+        if (scaled > long.MaxValue || scaled < long.MinValue) return;
+
+        var idx = _snapshotPool.GetOrAddIndex(token.Id);
+        ref var snap = ref _snapshotPool.GetSnapshot(idx);
+        snap.JupiterBuyPriceRaw = (long)scaled;
+        snap.JupiterTimestampUtc = DateTime.UtcNow.Ticks;
+        snap.JupiterLatencyMs = latencyMs;
+        snap.ProxyId = proxyId;
+        snap.ProxyErrorUntilUtc = 0;
+        Interlocked.Increment(ref snap.Sequence);
+        Interlocked.Increment(ref _succeededSinceSummary);
+        _tokenHealth[token.Id] = (token.Symbol, DateTime.UtcNow, latencyMs);
     }
 
     private static string Truncate(string s) => s.Length > 300 ? s[..300] + "…" : s;

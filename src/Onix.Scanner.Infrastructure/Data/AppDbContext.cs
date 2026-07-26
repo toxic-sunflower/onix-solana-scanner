@@ -16,7 +16,6 @@ public class AppDbContext : DbContext
     public DbSet<SpreadTick> SpreadTicks => Set<SpreadTick>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
     public DbSet<BlacklistedJti> BlacklistedJtis => Set<BlacklistedJti>();
-    public DbSet<LoginToken> LoginTokens => Set<LoginToken>();
     public DbSet<TokenQuoteAmount> TokenQuoteAmounts => Set<TokenQuoteAmount>();
 
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
@@ -40,6 +39,8 @@ public class AppDbContext : DbContext
             e.Property(x => x.JupiterUrl).IsRequired();
             e.Property(x => x.SolscanUrl).IsRequired();
             e.Property(x => x.Enabled).HasDefaultValue(true);
+            e.Property(x => x.RequiresMapping).HasDefaultValue(false);
+            e.Property(x => x.ProxyFallbackPolicy).HasMaxLength(20).HasConversion<string>().HasDefaultValue(ProxyFallbackPolicy.Strict);
             e.Property(x => x.TelegramEnabled).HasDefaultValue(true);
             e.Property(x => x.IsAvailableOnCex).HasDefaultValue(false);
             e.Property(x => x.Status).HasMaxLength(20).HasConversion<string>().HasDefaultValue(TokenHealthStatus.Disabled);
@@ -166,19 +167,5 @@ public class AppDbContext : DbContext
             e.HasIndex(x => x.ExpiresAt).HasDatabaseName("idx_blacklisted_jtis_expires");
         });
 
-        modelBuilder.Entity<LoginToken>(e =>
-        {
-            e.ToTable("login_tokens");
-            e.HasKey(x => x.Id);
-            e.Property(x => x.Id).HasDefaultValueSql("uuid_generate_v4()");
-            e.Property(x => x.Token).HasMaxLength(64).IsRequired();
-            e.Property(x => x.UserId).IsRequired();
-            e.Property(x => x.ExpiresAt).IsRequired();
-            e.Property(x => x.IsUsed).HasDefaultValue(false);
-            e.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
-            e.HasIndex(x => x.Token).IsUnique().HasDatabaseName("idx_login_tokens_token");
-            e.HasIndex(x => x.UserId).HasDatabaseName("idx_login_tokens_user_id");
-            e.HasIndex(x => x.ExpiresAt).HasDatabaseName("idx_login_tokens_expires");
-        });
     }
 }

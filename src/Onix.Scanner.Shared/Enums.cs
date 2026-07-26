@@ -22,6 +22,15 @@ public enum ProxyStatus
     Disabled
 }
 
+/// <summary>TZ п.8.3: "По умолчанию worker не должен незаметно переходить на
+/// общий IP, если токен настроен на обязательную индивидуальную прокси."
+/// Strict is the default for exactly that reason.</summary>
+public enum ProxyFallbackPolicy
+{
+    Strict,
+    FallbackToSharedIp
+}
+
 public enum QualityStatus
 {
     Valid,

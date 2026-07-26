@@ -2,7 +2,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Onix.Scanner.Api.Auth;
-using Onix.Scanner.Api.Services;
+using Onix.Scanner.Core;
 using Onix.Scanner.Core.Contracts;
 using Onix.Scanner.Shared.Models;
 
@@ -16,11 +16,13 @@ public class AdminController : ControllerBase
 {
     private readonly ITokenRepository _tokenRepo;
     private readonly IProxyRepository _proxyRepo;
+    private readonly ILogger<AdminController> _logger;
 
-    public AdminController(ITokenRepository tokenRepo, IProxyRepository proxyRepo)
+    public AdminController(ITokenRepository tokenRepo, IProxyRepository proxyRepo, ILogger<AdminController> logger)
     {
         _tokenRepo = tokenRepo;
         _proxyRepo = proxyRepo;
+        _logger = logger;
     }
 
     [HttpGet("tokens")]
@@ -41,7 +43,11 @@ public class AdminController : ControllerBase
         if (string.IsNullOrWhiteSpace(token.JupiterInputMint))
             return BadRequest(new { error = "Jupiter input mint is required" });
 
+        // A manually-created token is, by definition, an admin-confirmed mapping.
+        token.RequiresMapping = false;
+
         token = await _tokenRepo.CreateAsync(token, ct);
+        _logger.LogInformation("Admin created token {Symbol} ({Mint}) manually", token.Symbol, token.SolanaMint);
         return CreatedAtAction(nameof(GetAllTokens), new { id = token.Id }, token);
     }
 
@@ -57,7 +63,17 @@ public class AdminController : ControllerBase
             {
                 case "symbol": existing.Symbol = prop.Value.GetString()!; break;
                 case "name": existing.Name = prop.Value.GetString(); break;
-                case "solanamint": existing.SolanaMint = prop.Value.GetString()!; break;
+                case "solanamint":
+                    // TZ п.5: "Изменение Mint Address должно логироваться."
+                    var newMint = prop.Value.GetString()!;
+                    if (!string.Equals(existing.SolanaMint, newMint, StringComparison.Ordinal))
+                    {
+                        _logger.LogWarning(
+                            "Admin changed Mint Address for token {TokenId} ({Symbol}): {OldMint} -> {NewMint}",
+                            existing.Id, existing.Symbol, existing.SolanaMint, newMint);
+                        existing.SolanaMint = newMint;
+                    }
+                    break;
                 case "bingxsymbol": existing.BingxSymbol = prop.Value.GetString()!; break;
                 case "jupiterinputmint": existing.JupiterInputMint = prop.Value.GetString()!; break;
                 case "jupiterinputdecimals": existing.JupiterInputDecimals = prop.Value.GetInt32(); break;
@@ -69,11 +85,60 @@ public class AdminController : ControllerBase
                 case "solscanurl": existing.SolscanUrl = prop.Value.GetString()!; break;
                 case "enabled": existing.Enabled = prop.Value.GetBoolean(); break;
                 case "telegramenabled": existing.TelegramEnabled = prop.Value.GetBoolean(); break;
+                case "proxyid": existing.ProxyId = prop.Value.ValueKind == JsonValueKind.Null ? null : prop.Value.GetGuid(); break;
+                case "proxyfallbackpolicy":
+                    if (Enum.TryParse<Onix.Scanner.Shared.ProxyFallbackPolicy>(prop.Value.GetString(), true, out var policy))
+                        existing.ProxyFallbackPolicy = policy;
+                    break;
             }
         }
 
         existing.UpdatedAt = DateTime.UtcNow;
         await _tokenRepo.UpdateAsync(existing, ct);
+        return NoContent();
+    }
+
+    [HttpDelete("tokens/{id:guid}")]
+    public async Task<ActionResult> DeleteToken(Guid id, CancellationToken ct)
+    {
+        var existing = await _tokenRepo.GetByIdAsync(id, ct);
+        if (existing is null) return NotFound();
+        await _tokenRepo.DeleteAsync(id, ct);
+        _logger.LogInformation("Admin deleted token {Symbol} ({Mint})", existing.Symbol, existing.SolanaMint);
+        return NoContent();
+    }
+
+    /// <summary>TZ п.5: admin confirms a Mapping Required token really is the
+    /// right project — clears the gate and turns monitoring on.</summary>
+    [HttpPost("tokens/{id:guid}/confirm-mapping")]
+    public async Task<ActionResult> ConfirmMapping(Guid id, CancellationToken ct)
+    {
+        var existing = await _tokenRepo.GetByIdAsync(id, ct);
+        if (existing is null) return NotFound();
+
+        existing.RequiresMapping = false;
+        existing.Enabled = true;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _tokenRepo.UpdateAsync(existing, ct);
+        _logger.LogInformation("Admin confirmed mapping for token {Symbol} ({Mint})", existing.Symbol, existing.SolanaMint);
+        return NoContent();
+    }
+
+    /// <summary>Admin looked at a Mapping Required candidate and decided it's
+    /// not the right project (or just doesn't want it) — clears the gate
+    /// without enabling it. TokenSyncService won't touch Enabled/
+    /// RequiresMapping again for this row once it exists.</summary>
+    [HttpPost("tokens/{id:guid}/reject-mapping")]
+    public async Task<ActionResult> RejectMapping(Guid id, CancellationToken ct)
+    {
+        var existing = await _tokenRepo.GetByIdAsync(id, ct);
+        if (existing is null) return NotFound();
+
+        existing.RequiresMapping = false;
+        existing.Enabled = false;
+        existing.UpdatedAt = DateTime.UtcNow;
+        await _tokenRepo.UpdateAsync(existing, ct);
+        _logger.LogInformation("Admin rejected mapping for token {Symbol} ({Mint})", existing.Symbol, existing.SolanaMint);
         return NoContent();
     }
 
@@ -91,6 +156,15 @@ public class AdminController : ControllerBase
         proxy.UpdatedAt = DateTime.UtcNow;
         await _proxyRepo.CreateAsync(proxy, ct);
         return CreatedAtAction(nameof(GetAllProxies), new { id = proxy.Id }, proxy);
+    }
+
+    [HttpDelete("proxies/{id:guid}")]
+    public async Task<ActionResult> DeleteProxy(Guid id, CancellationToken ct)
+    {
+        var existing = await _proxyRepo.GetByIdAsync(id, ct);
+        if (existing is null) return NotFound();
+        await _proxyRepo.DeleteAsync(id, ct);
+        return NoContent();
     }
 
     [HttpPost("proxies/{id:guid}/test")]

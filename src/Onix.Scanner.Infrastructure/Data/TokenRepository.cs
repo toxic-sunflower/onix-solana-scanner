@@ -83,7 +83,18 @@ public class TokenRepository : ITokenRepository
                 existing.JupiterUrl = token.JupiterUrl;
                 existing.SolscanUrl = token.SolscanUrl;
                 existing.IsAvailableOnCex = token.IsAvailableOnCex;
-                existing.Enabled = token.Enabled;
+
+                // Enabled/RequiresMapping are admin-owned once a token
+                // exists — resync must never silently flip them (that's
+                // exactly the bug TZ п.5's "Mapping Required" status exists
+                // to prevent). The one automatic exception: if BingX
+                // delists it, there's nothing left to poll there for, so
+                // force-disable regardless of the admin's earlier decision.
+                if (!token.IsAvailableOnCex)
+                {
+                    existing.Enabled = false;
+                }
+
                 existing.UpdatedAt = DateTime.UtcNow;
             }
         }

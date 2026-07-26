@@ -22,6 +22,7 @@ public static class SpreadCalculator
     public static TokenHealthStatus ComputeStatus(
         Token token, TokenSnapshot snap, int staleThresholdMs = DefaultStaleThresholdMs)
     {
+        if (token.RequiresMapping) return TokenHealthStatus.MappingRequired;
         if (!token.Enabled) return TokenHealthStatus.Disabled;
         if (string.IsNullOrWhiteSpace(token.SolanaMint)) return TokenHealthStatus.MappingRequired;
 

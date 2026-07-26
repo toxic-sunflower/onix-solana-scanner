@@ -86,7 +86,16 @@ public sealed class TokenSyncService : BackgroundService
                 BingxUrl = cex ? $"https://bingx.com/en/perpetual/{bingxSymbol}" : "",
                 JupiterUrl = $"https://jup.ag/swap/{jt.Symbol}-USDC",
                 SolscanUrl = $"https://solscan.io/token/{jt.Mint}",
-                Enabled = cex,
+                // TZ п.5: a ticker match is never auto-enabled — matching by
+                // symbol alone isn't proof it's the same real-world project
+                // (see the AVA incident: one unambiguous Jupiter candidate,
+                // still the wrong asset, ~20x price gap). New tokens land
+                // disabled with RequiresMapping set; an admin confirms or
+                // rejects them. TokenRepository.UpsertBatchAsync preserves
+                // whatever an admin decided for tokens that already exist —
+                // this only applies the first time a mint is ever seen.
+                Enabled = false,
+                RequiresMapping = cex,
                 TelegramEnabled = false,
                 IsAvailableOnCex = cex,
             });
