@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, type IChartApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import type { ChartResponse, UserTokenDto, QuotePayload, TickPoint } from '../types';
+import { authFetch } from '../lib/auth';
 import { on, off } from '../lib/sse';
 
 interface Props {
@@ -21,9 +22,10 @@ export default function ChartPage({ tokenId, onBack }: Props) {
   const [activeTab, setActiveTab] = useState<'candles' | 'spreadline'>('candles');
 
   useEffect(() => {
-    fetch(`/api/v1/tokens/${tokenId}`)
-      .then(res => res.json())
+    authFetch(`/api/v1/tokens/${tokenId}`)
+      .then(res => res.ok ? res.json() : null)
       .then((data: any) => {
+        if (!data) return;
         setToken({
           id: data.id,
           symbol: data.symbol,
@@ -34,7 +36,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         } as UserTokenDto);
       });
 
-    fetch(`/api/v1/tokens/${tokenId}/ticks?limit=500`)
+    authFetch(`/api/v1/tokens/${tokenId}/ticks?limit=500`)
       .then(res => res.ok ? res.json() : [])
       .then(setTicks);
 
@@ -62,8 +64,8 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     const from = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
     const to = new Date().toISOString();
 
-    fetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${from}&to=${to}`)
-      .then(res => res.json())
+    authFetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${from}&to=${to}`)
+      .then(res => res.ok ? res.json() : { candles: [] })
       .then((data: ChartResponse) => {
         while (el.firstChild) el.removeChild(el.firstChild);
 

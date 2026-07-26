@@ -23,9 +23,9 @@ export default function HistoryPage({ tokenId, onBack }: Props) {
   const [intervalSec, setIntervalSec] = useState(0);
 
   useEffect(() => {
-    fetch(`/api/v1/tokens/${tokenId}`)
-      .then(res => res.json())
-      .then((data: any) => setToken(data as UserTokenDto));
+    authFetch(`/api/v1/tokens/${tokenId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then((data: any) => { if (data) setToken(data as UserTokenDto); });
 
     const onQuote = (p: any) => {
       if (p.token_id === tokenId) {
