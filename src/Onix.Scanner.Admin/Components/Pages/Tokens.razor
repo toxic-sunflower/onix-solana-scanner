@@ -139,6 +139,7 @@ else
     </table>
 }
 
+@implements IDisposable
 @code {
     private List<Token>? _all;
     private List<Token>? _pending;
@@ -152,7 +153,38 @@ else
     private string _newBingxSymbol = "";
     private string? _addError;
 
-    protected override async Task OnInitializedAsync() => await LoadAsync();
+    // Ticks(1h)/Last tick are otherwise a snapshot from whenever the page
+    // last loaded — without this they look "frozen" even though the
+    // underlying data is changing every second (TODO.md/chat: this confused
+    // more than one person). Doesn't touch _showAddForm/_addError so typing
+    // in the manual-add form isn't disrupted by the tick.
+    private readonly PeriodicTimer _refreshTimer = new(TimeSpan.FromSeconds(5));
+    private CancellationTokenSource _refreshCts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        _ = AutoRefreshLoopAsync(_refreshCts.Token);
+    }
+
+    private async Task AutoRefreshLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync(ct))
+            {
+                await LoadStatsOnlyAsync();
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    public void Dispose()
+    {
+        _refreshCts.Cancel();
+        _refreshTimer.Dispose();
+    }
 
     private async Task LoadAsync()
     {
@@ -164,6 +196,22 @@ else
         _proxies = await db.Proxies.OrderBy(p => p.Host).ToListAsync();
         _quoteAmounts = await TokenRepo.GetAllQuoteAmountsAsync();
 
+        var stats = await db.SpreadTicks
+            .Where(t => t.CalculatedAt >= since)
+            .GroupBy(t => t.TokenId)
+            .Select(g => new { TokenId = g.Key, Count = g.Count(), LastAt = g.Max(x => x.CalculatedAt) })
+            .ToListAsync();
+        _stats = stats.ToDictionary(s => s.TokenId, s => (s.Count, (DateTime?)s.LastAt));
+    }
+
+    /// <summary>Cheaper than LoadAsync — just the Ticks(1h)/Last tick numbers,
+    /// called every 5s by the auto-refresh timer. Doesn't touch _all/_proxies/
+    /// _quoteAmounts so it can't reset a proxy dropdown mid-selection or wipe
+    /// the "add token" form the user is typing into.</summary>
+    private async Task LoadStatsOnlyAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var since = DateTime.UtcNow.AddHours(-1);
         var stats = await db.SpreadTicks
             .Where(t => t.CalculatedAt >= since)
             .GroupBy(t => t.TokenId)
