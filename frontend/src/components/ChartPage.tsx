@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, type IChartApi, CandlestickSeries, LineSeries } from 'lightweight-charts';
-import type { ChartResponse, UserTokenDto, QuotePayload, TickPoint } from '../types';
+import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import type { ChartResponse, UserTokenDto, QuotePayload } from '../types';
 import { authFetch } from '../lib/auth';
 import { on, off } from '../lib/sse';
 
@@ -11,15 +11,25 @@ interface Props {
 
 const intervals = ['5m', '15m', '1h'] as const;
 
+// Must match ChartsController/SpreadTickRepository.GetChartAsync's bucketSeconds mapping.
+const BUCKET_SECONDS: Record<string, number> = { '5m': 300, '15m': 900, '1h': 3600 };
+
+interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; }
+
 export default function ChartPage({ tokenId, onBack }: Props) {
   const candleRef = useRef<HTMLDivElement>(null);
   const lineRef = useRef<HTMLDivElement>(null);
   const candleChart = useRef<IChartApi | null>(null);
   const lineChart = useRef<IChartApi | null>(null);
+  const candleSeries = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const lineSeries = useRef<ISeriesApi<'Line'> | null>(null);
+  const currentBar = useRef<Bar | null>(null);
   const [selectedInterval, setSelectedInterval] = useState<string>('5m');
+  const intervalRef = useRef(selectedInterval);
   const [token, setToken] = useState<UserTokenDto | null>(null);
-  const [ticks, setTicks] = useState<TickPoint[]>([]);
   const [activeTab, setActiveTab] = useState<'candles' | 'spreadline'>('candles');
+
+  useEffect(() => { intervalRef.current = selectedInterval; }, [selectedInterval]);
 
   useEffect(() => {
     authFetch(`/api/v1/tokens/${tokenId}`)
@@ -36,19 +46,39 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         } as UserTokenDto);
       });
 
-    authFetch(`/api/v1/tokens/${tokenId}/ticks?limit=500`)
-      .then(res => res.ok ? res.json() : [])
-      .then(setTicks);
-
     const onQuote = (p: QuotePayload) => {
-      if (p.token_id === tokenId) {
-        setToken(prev => prev ? {
-          ...prev,
-          bingxAskPrice: p.bingx_ask_price,
-          jupiterBuyPrice: p.jupiter_buy_price,
-          spreadPct: p.spread_pct,
-          lastUpdated: p.calculated_at,
-        } : prev);
+      if (p.token_id !== tokenId) return;
+
+      setToken(prev => prev ? {
+        ...prev,
+        bingxAskPrice: p.bingx_ask_price,
+        jupiterBuyPrice: p.jupiter_buy_price,
+        spreadPct: p.spread_pct,
+        lastUpdated: p.calculated_at,
+      } : prev);
+
+      // Push straight into the chart series instead of React state — no
+      // full re-render/rebuild per tick, which was making the chart look
+      // like it kept resetting/rescaling on every update.
+      if (lineSeries.current) {
+        lineSeries.current.update({
+          time: (new Date(p.calculated_at).getTime() / 1000) as UTCTimestamp,
+          value: p.spread_pct,
+        });
+      }
+
+      if (candleSeries.current) {
+        const bucketSeconds = BUCKET_SECONDS[intervalRef.current] ?? 300;
+        const nowSec = Math.floor(new Date(p.calculated_at).getTime() / 1000);
+        const bucketStart = (Math.floor(nowSec / bucketSeconds) * bucketSeconds) as UTCTimestamp;
+
+        const prevBar = currentBar.current;
+        const bar: Bar = prevBar && prevBar.time === bucketStart
+          ? { time: bucketStart, open: prevBar.open, high: Math.max(prevBar.high, p.spread_pct), low: Math.min(prevBar.low, p.spread_pct), close: p.spread_pct }
+          : { time: bucketStart, open: p.spread_pct, high: p.spread_pct, low: p.spread_pct, close: p.spread_pct };
+
+        currentBar.current = bar;
+        candleSeries.current.update(bar);
       }
     };
     on('token.quote', onQuote);
@@ -61,6 +91,9 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     if (!el || activeTab !== 'candles') return;
 
     candleChart.current?.remove();
+    candleSeries.current = null;
+    currentBar.current = null;
+
     const from = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
     const to = new Date().toISOString();
 
@@ -70,7 +103,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         while (el.firstChild) el.removeChild(el.firstChild);
 
         const chart = createChart(el, {
-          width: el.clientWidth,
+          autoSize: true,
           height: 400,
           layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
           grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
@@ -87,17 +120,25 @@ export default function ChartPage({ tokenId, onBack }: Props) {
           wickUpColor: '#22c55e',
           wickDownColor: '#ef4444',
         });
+        candleSeries.current = series;
 
-        const candles = (data.candles ?? []).map(c => ({
-          time: new Date(c.time).getTime() / 1000 as any,
+        const candles: Bar[] = (data.candles ?? []).map(c => ({
+          time: (new Date(c.time).getTime() / 1000) as UTCTimestamp,
           open: c.open, high: c.high, low: c.low, close: c.close,
         }));
 
         if (candles.length > 0) {
           series.setData(candles);
+          currentBar.current = candles[candles.length - 1];
           chart.timeScale().fitContent();
         }
       });
+
+    return () => {
+      candleChart.current?.remove();
+      candleChart.current = null;
+      candleSeries.current = null;
+    };
   }, [tokenId, selectedInterval, activeTab]);
 
   useEffect(() => {
@@ -105,11 +146,11 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     if (!el || activeTab !== 'spreadline') return;
 
     lineChart.current?.remove();
+    lineSeries.current = null;
     while (el.firstChild) el.removeChild(el.firstChild);
 
-    const w = el.clientWidth || el.parentElement?.clientWidth || 600;
     const chart = createChart(el, {
-      width: w,
+      autoSize: true,
       height: 200,
       layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
       grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
@@ -123,27 +164,28 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       lineWidth: 2,
       crosshairMarkerVisible: true,
     });
+    lineSeries.current = series;
 
-    const points = ticks.map(t => ({
-      time: new Date(t.time).getTime() / 1000 as any,
-      value: t.spreadPct,
-    }));
+    authFetch(`/api/v1/tokens/${tokenId}/ticks?limit=500`)
+      .then(res => res.ok ? res.json() : [])
+      .then((ticks: { time: string; spreadPct: number }[]) => {
+        const points = ticks.map(t => ({
+          time: (new Date(t.time).getTime() / 1000) as UTCTimestamp,
+          value: t.spreadPct,
+        })).sort((a, b) => a.time - b.time);
 
-    if (points.length > 0) {
-      series.setData(points);
-      chart.timeScale().fitContent();
-    }
-  }, [ticks, activeTab]);
+        if (points.length > 0) {
+          series.setData(points);
+          chart.timeScale().fitContent();
+        }
+      });
 
-  useEffect(() => {
-    const ro = new ResizeObserver(() => {
-      candleChart.current?.resize(candleRef.current?.clientWidth ?? 600, 400);
-      lineChart.current?.resize(lineRef.current?.clientWidth ?? 600, 200);
-    });
-    if (candleRef.current) ro.observe(candleRef.current);
-    if (lineRef.current) ro.observe(lineRef.current);
-    return () => ro.disconnect();
-  }, []);
+    return () => {
+      lineChart.current?.remove();
+      lineChart.current = null;
+      lineSeries.current = null;
+    };
+  }, [tokenId, activeTab]);
 
   useEffect(() => () => {
     candleChart.current?.remove();
