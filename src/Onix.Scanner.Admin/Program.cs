@@ -92,6 +92,14 @@ builder.Services.AddRateLimiter(options =>
 
 var app = builder.Build();
 
+// Must run before anything else in the pipeline — nginx forwards the full
+// path including the "/admin" prefix (see docker-compose.yml PathBase env
+// var + App.razor's <base href>), and UsePathBase strips it before routing
+// sees the request, so Razor routes like "/proxies" still match "/admin/proxies".
+var pathBase = app.Configuration["PathBase"];
+if (!string.IsNullOrEmpty(pathBase))
+    app.UsePathBase(pathBase);
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -135,16 +143,16 @@ app.MapPost("/account/login", async (HttpContext ctx) =>
             [new Claim(ClaimTypes.Name, username)],
             CookieAuthenticationDefaults.AuthenticationScheme);
         await ctx.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity));
-        return Results.Redirect("/");
+        return Results.Redirect($"{pathBase}/");
     }
 
-    return Results.Redirect("/login?error=1");
+    return Results.Redirect($"{pathBase}/login?error=1");
 }).AllowAnonymous().RequireRateLimiting("login");
 
 app.MapGet("/logout", async (HttpContext ctx) =>
 {
     await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-    return Results.Redirect("/login");
+    return Results.Redirect($"{pathBase}/login");
 });
 
 app.MapStaticAssets();

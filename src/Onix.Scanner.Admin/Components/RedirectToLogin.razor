@@ -1,5 +1,7 @@
 @inject NavigationManager Nav
 
 @code {
-    protected override void OnInitialized() => Nav.NavigateTo("/login", forceLoad: true);
+    // Relative (no leading slash) so it resolves against <base href> — with a
+    // leading slash this would ignore PathBase and land on the domain root.
+    protected override void OnInitialized() => Nav.NavigateTo("login", forceLoad: true);
 }

@@ -1,10 +1,11 @@
-﻿<!DOCTYPE html>
+﻿@inject IConfiguration Configuration
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <base href="/" />
+    <base href="@BaseHref" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
     <link rel="stylesheet" href="@Assets["app.css"]" />
@@ -21,3 +22,12 @@
 </body>
 
 </html>
+
+@code {
+    // Set via config "PathBase" (env var PATH_BASE, see docker-compose.yml)
+    // when nginx forwards a sub-path like /admin/ instead of serving this
+    // app at the domain root — must match Program.cs's app.UsePathBase(...).
+    private string BaseHref => string.IsNullOrEmpty(Configuration["PathBase"])
+        ? "/"
+        : Configuration["PathBase"]!.TrimEnd('/') + "/";
+}
