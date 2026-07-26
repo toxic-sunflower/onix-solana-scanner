@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp, CandlestickSeries, LineSeries } from 'lightweight-charts';
+import { createChart, type IChartApi, type ISeriesApi, type UTCTimestamp, type AutoscaleInfo, CandlestickSeries, LineSeries } from 'lightweight-charts';
 import type { ChartResponse, UserTokenDto, QuotePayload } from '../types';
 import { authFetch } from '../lib/auth';
 import { on, off } from '../lib/sse';
@@ -21,6 +21,50 @@ const RETENTION_HOURS = 72;
 const HISTORY_CHUNK_HOURS = 24;
 
 interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; }
+interface LinePoint { time: UTCTimestamp; value: number; }
+
+// A single wildly-off spread reading (bad token data, ticker collision,
+// momentary glitch) stretches the whole price axis to fit it, squashing
+// every normal candle into an unreadable sliver at one edge. Instead of
+// naive min/max, clamp the visible range to the 2nd-98th percentile of the
+// loaded values (+15% padding) so one outlier can't dominate the scale —
+// it'll render partially or fully off-screen, which is the trade-off:
+// readable normal candles instead of a flat line under one huge spike.
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0;
+  const idx = Math.min(sorted.length - 1, Math.max(0, Math.round(p * (sorted.length - 1))));
+  return sorted[idx];
+}
+
+function clampedRange(values: number[]): { minValue: number; maxValue: number } | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const lo = percentile(sorted, 0.02);
+  const hi = percentile(sorted, 0.98);
+  const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.1 || 1;
+  return { minValue: lo - pad, maxValue: hi + pad };
+}
+
+// Backend only returns a candle for buckets that actually had ticks — gaps
+// where nothing happened for a while otherwise render as empty space, which
+// reads as "broken", not "no activity". Fill missing buckets with a flat
+// (open=high=low=close) candle carrying the previous close forward, so the
+// timeline is continuous like a real candlestick chart.
+function fillGaps(bars: Bar[], bucketSeconds: number): Bar[] {
+  if (bars.length === 0) return bars;
+  const filled: Bar[] = [bars[0]];
+  for (let i = 1; i < bars.length; i++) {
+    let t = filled[filled.length - 1].time as number;
+    const next = bars[i];
+    while (t + bucketSeconds < next.time) {
+      t += bucketSeconds;
+      const prevClose = filled[filled.length - 1].close;
+      filled.push({ time: t as UTCTimestamp, open: prevClose, high: prevClose, low: prevClose, close: prevClose });
+    }
+    filled.push(next);
+  }
+  return filled;
+}
 
 export default function ChartPage({ tokenId, onBack }: Props) {
   const candleRef = useRef<HTMLDivElement>(null);
@@ -31,6 +75,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
   const lineSeries = useRef<ISeriesApi<'Line'> | null>(null);
   const currentBar = useRef<Bar | null>(null);
   const allCandles = useRef<Bar[]>([]);
+  const allLinePoints = useRef<LinePoint[]>([]);
   const earliestLoaded = useRef<number | null>(null);
   const noMoreHistory = useRef(false);
   const loadingMoreHistory = useRef(false);
@@ -71,10 +116,12 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       // full re-render/rebuild per tick, which was making the chart look
       // like it kept resetting/rescaling on every update.
       if (lineSeries.current) {
-        lineSeries.current.update({
+        const point: LinePoint = {
           time: (new Date(p.calculated_at).getTime() / 1000) as UTCTimestamp,
           value: p.spread_pct,
-        });
+        };
+        lineSeries.current.update(point);
+        allLinePoints.current.push(point);
       }
 
       if (candleSeries.current) {
@@ -89,6 +136,10 @@ export default function ChartPage({ tokenId, onBack }: Props) {
 
         currentBar.current = bar;
         candleSeries.current.update(bar);
+
+        const arr = allCandles.current;
+        if (arr.length > 0 && arr[arr.length - 1].time === bar.time) arr[arr.length - 1] = bar;
+        else arr.push(bar);
       }
     };
     on('token.quote', onQuote);
@@ -108,6 +159,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     noMoreHistory.current = false;
     loadingMoreHistory.current = false;
 
+    const bucketSeconds = BUCKET_SECONDS[selectedInterval] ?? 300;
     const oldestPossible = Date.now() - RETENTION_HOURS * 60 * 60 * 1000;
     const from = new Date(oldestPossible).toISOString();
     const to = new Date().toISOString();
@@ -132,14 +184,14 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       if (older.length === 0) {
         noMoreHistory.current = chunkFrom === from || new Date(chunkFrom).getTime() <= oldestPossible;
       } else {
-        allCandles.current = [...older, ...allCandles.current];
+        allCandles.current = fillGaps([...older, ...allCandles.current], bucketSeconds);
         earliestLoaded.current = allCandles.current[0].time;
         candleSeries.current?.setData(allCandles.current);
       }
       loadingMoreHistory.current = false;
     };
 
-    fetchChart(from, to).then(candles => {
+    fetchChart(from, to).then(rawCandles => {
       while (el.firstChild) el.removeChild(el.firstChild);
 
       const chart = createChart(el, {
@@ -159,8 +211,14 @@ export default function ChartPage({ tokenId, onBack }: Props) {
         borderDownColor: '#ef4444',
         wickUpColor: '#22c55e',
         wickDownColor: '#ef4444',
+        autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+          const range = clampedRange(allCandles.current.flatMap(b => [b.low, b.high]));
+          return range ? { priceRange: range } : original();
+        },
       });
       candleSeries.current = series;
+
+      const candles = fillGaps(rawCandles, bucketSeconds);
       allCandles.current = candles;
 
       if (candles.length > 0) {
@@ -190,6 +248,7 @@ export default function ChartPage({ tokenId, onBack }: Props) {
 
     lineChart.current?.remove();
     lineSeries.current = null;
+    allLinePoints.current = [];
     while (el.firstChild) el.removeChild(el.firstChild);
 
     const chart = createChart(el, {
@@ -206,17 +265,22 @@ export default function ChartPage({ tokenId, onBack }: Props) {
       color: '#f59e0b',
       lineWidth: 2,
       crosshairMarkerVisible: true,
+      autoscaleInfoProvider: (original: () => AutoscaleInfo | null) => {
+        const range = clampedRange(allLinePoints.current.map(p => p.value));
+        return range ? { priceRange: range } : original();
+      },
     });
     lineSeries.current = series;
 
     authFetch(`/api/v1/tokens/${tokenId}/ticks?limit=500`)
       .then(res => res.ok ? res.json() : [])
       .then((ticks: { time: string; spreadPct: number }[]) => {
-        const points = ticks.map(t => ({
+        const points: LinePoint[] = ticks.map(t => ({
           time: (new Date(t.time).getTime() / 1000) as UTCTimestamp,
           value: t.spreadPct,
         })).sort((a, b) => a.time - b.time);
 
+        allLinePoints.current = points;
         if (points.length > 0) {
           series.setData(points);
           chart.timeScale().fitContent();

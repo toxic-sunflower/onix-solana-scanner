@@ -83,7 +83,7 @@ public sealed class TokenSyncService : BackgroundService
                 BingxSymbol = bingxSymbol,
                 JupiterInputMint = UsdcMint,
                 JupiterInputDecimals = UsdcDecimals,
-                BingxUrl = cex ? $"https://www.bingx.com/en-us/futures/{bingxSymbol}" : "",
+                BingxUrl = cex ? $"https://bingx.com/en/perpetual/{bingxSymbol}" : "",
                 JupiterUrl = $"https://jup.ag/swap/{jt.Symbol}-USDC",
                 SolscanUrl = $"https://solscan.io/token/{jt.Mint}",
                 Enabled = cex,
