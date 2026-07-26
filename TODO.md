@@ -5,6 +5,15 @@
 
 ## Критическое
 
+- [ ] **Коллизия тикеров Jupiter↔BingX даёт бессмысленный спред** —
+      `TokenSyncService.SyncTokensAsync` сопоставляет токен Jupiter с парой
+      BingX только по строковому символу (`bingxSymbols.Contains(jt.Symbol)`,
+      [TokenSyncService.cs:74](src/Onix.Scanner.Api/Services/TokenSyncService.cs:74)).
+      Подтверждено вживую: токен AVA показывает спред +1899% (CEX $0.16 vs
+      DEX $0.008) — похоже на то, что BingX AVA-USDT и солана-токен AVA из
+      выдачи Jupiter (`tokens/v2/search?query=`, фаззи-поиск) — это разные
+      активы с совпавшим тикером. Нужно сопоставлять по mint-адресу/контракту
+      или вручную вайтлистить, а не по голому символу.
 - [ ] **Proxy Test заглушка вернулась/не проверено после последних правок** —
       `POST /admin/proxies/{id}/test` — реализация есть (`ProxyTester.cs`),
       сверить что не регрессировало.
@@ -76,7 +85,21 @@
 - [x] Per-token proxy — HTTP/SOCKS5, шифрование паролей AES-256-CBC
 - [x] SignalR — token.quote, token.status, token.alert, version + event_id
 - [x] Web Dashboard — карточки, сортировка, фильтр статусов, SignalR
-- [x] Chart Page — OHLC 5m/15m/1h, Lightweight Charts v5
+- [x] Chart Page — OHLC 5m/15m/1h, Lightweight Charts v5. Live SSE-обновление
+      текущего бара + line-серии (не только one-shot REST). Ленивая подгрузка
+      истории при скролле к краю (до границы retention 72ч). Tooltip
+      time/O/H/L/C/samples (ТЗ п.12.2, через `subscribeCrosshairMove`).
+      Кнопка "Reset scale" (ТЗ п.12.3 "возможность reset scale"). Пропуски
+      данных НЕ заполняются фиктивными свечами — ТЗ п.12.3 прямо запрещает
+      ("при samples = 0 свеча отсутствует"); был неверный gap-fill фикс,
+      откачен после сверки с ТЗ.
+- [x] JupiterWorkerService — независимый persistent-цикл на каждый токен
+      (ТЗ п.7.1 "один токен = один независимый worker"), супервизор раз в
+      секунду батчем обновляет токены/прокси/суммы без роста нагрузки на БД.
+      Per-token 429-бэкофф (не морозит всю shared-группу). Observability:
+      per-token last-success + раз в минуту сводка в лог (enabled count,
+      sweep/db-refresh ms, ok/rate-limited/errored/skipped, топ-5 самых
+      "протухших" токенов по символу).
 - [x] Settings Page — порог, cooldown, timezone
 - [x] Admin — CRUD токенов/прокси, [AdminAuthorize]
 - [x] Rate limiting — Jupiter (2s + backoff), API (100 req/min)
