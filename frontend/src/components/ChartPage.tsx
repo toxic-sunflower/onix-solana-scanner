@@ -14,6 +14,12 @@ const intervals = ['5m', '15m', '1h'] as const;
 // Must match ChartsController/SpreadTickRepository.GetChartAsync's bucketSeconds mapping.
 const BUCKET_SECONDS: Record<string, number> = { '5m': 300, '15m': 900, '1h': 3600 };
 
+// RetentionService hard-deletes spread_ticks/spread_candles older than this
+// (see RetentionService.cs) — there is no data before it, ever, so once a
+// history fetch hits this wall we stop asking instead of retrying forever.
+const RETENTION_HOURS = 72;
+const HISTORY_CHUNK_HOURS = 24;
+
 interface Bar { time: UTCTimestamp; open: number; high: number; low: number; close: number; }
 
 export default function ChartPage({ tokenId, onBack }: Props) {
@@ -24,6 +30,10 @@ export default function ChartPage({ tokenId, onBack }: Props) {
   const candleSeries = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const lineSeries = useRef<ISeriesApi<'Line'> | null>(null);
   const currentBar = useRef<Bar | null>(null);
+  const allCandles = useRef<Bar[]>([]);
+  const earliestLoaded = useRef<number | null>(null);
+  const noMoreHistory = useRef(false);
+  const loadingMoreHistory = useRef(false);
   const [selectedInterval, setSelectedInterval] = useState<string>('5m');
   const intervalRef = useRef(selectedInterval);
   const [token, setToken] = useState<UserTokenDto | null>(null);
@@ -93,46 +103,79 @@ export default function ChartPage({ tokenId, onBack }: Props) {
     candleChart.current?.remove();
     candleSeries.current = null;
     currentBar.current = null;
+    allCandles.current = [];
+    earliestLoaded.current = null;
+    noMoreHistory.current = false;
+    loadingMoreHistory.current = false;
 
-    const from = new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString();
+    const oldestPossible = Date.now() - RETENTION_HOURS * 60 * 60 * 1000;
+    const from = new Date(oldestPossible).toISOString();
     const to = new Date().toISOString();
 
-    authFetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${from}&to=${to}`)
-      .then(res => res.ok ? res.json() : { candles: [] })
-      .then((data: ChartResponse) => {
-        while (el.firstChild) el.removeChild(el.firstChild);
-
-        const chart = createChart(el, {
-          autoSize: true,
-          height: 400,
-          layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
-          grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
-          timeScale: { timeVisible: true, borderColor: '#374151' },
-          rightPriceScale: { borderColor: '#374151' },
-        });
-        candleChart.current = chart;
-
-        const series = chart.addSeries(CandlestickSeries, {
-          upColor: '#22c55e',
-          downColor: '#ef4444',
-          borderUpColor: '#22c55e',
-          borderDownColor: '#ef4444',
-          wickUpColor: '#22c55e',
-          wickDownColor: '#ef4444',
-        });
-        candleSeries.current = series;
-
-        const candles: Bar[] = (data.candles ?? []).map(c => ({
+    const fetchChart = (fromIso: string, toIso: string) =>
+      authFetch(`/api/v1/tokens/${tokenId}/chart?interval=${selectedInterval}&from=${fromIso}&to=${toIso}`)
+        .then(res => res.ok ? res.json() : Promise.resolve({ candles: [] }))
+        .then((data: Pick<ChartResponse, 'candles'>) => (data.candles ?? []).map(c => ({
           time: (new Date(c.time).getTime() / 1000) as UTCTimestamp,
           open: c.open, high: c.high, low: c.low, close: c.close,
-        }));
+        } as Bar)));
 
-        if (candles.length > 0) {
-          series.setData(candles);
-          currentBar.current = candles[candles.length - 1];
-          chart.timeScale().fitContent();
-        }
+    const loadMoreHistory = async () => {
+      if (loadingMoreHistory.current || noMoreHistory.current || earliestLoaded.current === null) return;
+      if (earliestLoaded.current * 1000 <= oldestPossible) { noMoreHistory.current = true; return; }
+
+      loadingMoreHistory.current = true;
+      const chunkTo = new Date(earliestLoaded.current * 1000).toISOString();
+      const chunkFrom = new Date(Math.max(oldestPossible, earliestLoaded.current * 1000 - HISTORY_CHUNK_HOURS * 60 * 60 * 1000)).toISOString();
+
+      const older = await fetchChart(chunkFrom, chunkTo);
+      if (older.length === 0) {
+        noMoreHistory.current = chunkFrom === from || new Date(chunkFrom).getTime() <= oldestPossible;
+      } else {
+        allCandles.current = [...older, ...allCandles.current];
+        earliestLoaded.current = allCandles.current[0].time;
+        candleSeries.current?.setData(allCandles.current);
+      }
+      loadingMoreHistory.current = false;
+    };
+
+    fetchChart(from, to).then(candles => {
+      while (el.firstChild) el.removeChild(el.firstChild);
+
+      const chart = createChart(el, {
+        autoSize: true,
+        height: 400,
+        layout: { background: { color: '#1a1b24' }, textColor: '#9ca3af' },
+        grid: { vertLines: { color: '#2a2b36' }, horzLines: { color: '#2a2b36' } },
+        timeScale: { timeVisible: true, borderColor: '#374151' },
+        rightPriceScale: { borderColor: '#374151' },
       });
+      candleChart.current = chart;
+
+      const series = chart.addSeries(CandlestickSeries, {
+        upColor: '#22c55e',
+        downColor: '#ef4444',
+        borderUpColor: '#22c55e',
+        borderDownColor: '#ef4444',
+        wickUpColor: '#22c55e',
+        wickDownColor: '#ef4444',
+      });
+      candleSeries.current = series;
+      allCandles.current = candles;
+
+      if (candles.length > 0) {
+        series.setData(candles);
+        currentBar.current = candles[candles.length - 1];
+        earliestLoaded.current = candles[0].time;
+        chart.timeScale().fitContent();
+      } else {
+        earliestLoaded.current = Math.floor(Date.now() / 1000) as UTCTimestamp;
+      }
+
+      chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+        if (range && range.from < 5) loadMoreHistory();
+      });
+    });
 
     return () => {
       candleChart.current?.remove();
