@@ -20,31 +20,33 @@
         совпадение по тикеру между Jupiter и BingX не проверено, могут быть разные проекты
         (см. инцидент AVA: CEX $0.16 vs DEX $0.008 — совпал только тикер).
     </div>
-    <table class="table table-sm table-bordered mb-4">
-        <thead><tr><th>Symbol</th><th>Name</th><th>Mint</th><th>BingX</th><th></th></tr></thead>
-        <tbody>
-            @foreach (var t in _pending)
-            {
-                <tr>
-                    <td><strong>@t.Symbol</strong></td>
-                    <td>@t.Name</td>
-                    <td class="text-truncate" style="max-width:260px">
-                        <a href="https://solscan.io/token/@t.SolanaMint" target="_blank">@t.SolanaMint</a>
-                    </td>
-                    <td><a href="@t.BingxUrl" target="_blank">@t.BingxSymbol</a></td>
-                    <td class="text-nowrap">
-                        <button class="btn btn-sm btn-success" @onclick="() => ConfirmMapping(t)">Confirm</button>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RejectMapping(t)">Reject</button>
-                    </td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm mb-0">
+            <thead><tr><th>Symbol</th><th>Name</th><th>Mint</th><th>BingX</th><th></th></tr></thead>
+            <tbody>
+                @foreach (var t in _pending)
+                {
+                    <tr>
+                        <td><strong>@t.Symbol</strong></td>
+                        <td>@t.Name</td>
+                        <td class="text-truncate" style="max-width:260px">
+                            <a href="https://solscan.io/token/@t.SolanaMint" target="_blank">@t.SolanaMint</a>
+                        </td>
+                        <td><a href="@t.BingxUrl" target="_blank">@t.BingxSymbol</a></td>
+                        <td class="text-nowrap">
+                            <button class="btn btn-sm btn-success" @onclick="() => ConfirmMapping(t)">Confirm</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RejectMapping(t)">Reject</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
 }
 
 <p class="text-muted">Ticks (1h) считается напрямую по spread_ticks.</p>
 
-<div class="mb-3">
+<div class="mb-3 d-flex gap-2">
     <button class="btn btn-sm btn-secondary" @onclick="LoadAsync">Обновить</button>
     <button class="btn btn-sm btn-primary" @onclick="() => _showAddForm = !_showAddForm">
         @(_showAddForm ? "Отмена" : "Добавить токен вручную")
@@ -80,7 +82,8 @@
 }
 else
 {
-    <table class="table table-sm table-striped table-hover">
+    <div class="table-responsive">
+    <table class="table table-sm table-striped table-hover mb-0">
         <thead>
             <tr>
                 <th>Symbol</th>
@@ -143,6 +146,7 @@ else
             }
         </tbody>
     </table>
+    </div>
 }
 
 @implements IDisposable

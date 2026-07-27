@@ -56,8 +56,14 @@ h1, h2, h3, h4, h5, h6 {
     color: var(--onix-text);
 }
 
+h1 {
+    margin-bottom: 1.25rem;
+    font-size: 1.75rem;
+}
+
 .content {
     padding-top: 1.1rem;
+    padding-bottom: 3rem;
 }
 
 h1:focus {
@@ -131,19 +137,39 @@ h1:focus {
 }
 
 /* ── Tables ── */
+.table-responsive {
+    background-color: var(--onix-panel);
+    border: 1px solid var(--onix-border);
+    border-radius: 10px;
+    padding: 4px;
+}
 .table {
     color: var(--onix-text);
     border-color: var(--onix-border);
+    margin-bottom: 0;
     --bs-table-bg: var(--onix-panel);
     --bs-table-striped-bg: var(--onix-panel-alt);
     --bs-table-hover-bg: #202129;
     --bs-table-hover-color: var(--onix-text);
     --bs-table-border-color: var(--onix-border);
 }
+/* table-sm is used throughout for density, but its 0.25rem cell padding
+   reads as "cramped" rather than "compact" on a dark background — give it
+   some breathing room without going back to Bootstrap's spacious default. */
+.table-sm > :not(caption) > * > * {
+    padding: 0.6rem 0.75rem;
+}
+.table thead th {
+    color: var(--onix-text-dim);
+    font-weight: 600;
+    border-bottom-width: 2px;
+    white-space: nowrap;
+}
 .table > :not(caption) > * > * {
     background-color: var(--bs-table-bg);
     color: var(--onix-text);
     border-bottom-color: var(--onix-border);
+    vertical-align: middle;
 }
 .table-danger, .table-danger > * {
     --bs-table-bg: rgba(239, 68, 68, 0.15) !important;
