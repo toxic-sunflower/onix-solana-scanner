@@ -54,32 +54,45 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
       .catch(() => setError('Config load failed'));
   }, []);
 
-  // Mini App auto-login via window.Telegram.WebApp.initData — TEMPORARILY
-  // DISABLED (2026-07-27): broke the Mini App in production (empty
-  // dashboard) right after shipping, while the plain browser OAuth path
-  // kept working fine. Couldn't reproduce/debug blind without a real
-  // Telegram initData sample, so reverted to the working OAuth-only
-  // behavior for both contexts instead of guessing further on live prod.
-  // The backend endpoint (POST /api/v1/auth/telegram-webapp) is untouched
-  // and safe to re-wire here once this is debugged with real data.
-  /*
+  // Mini App auto-login via window.Telegram.WebApp.initData. Logs verbosely
+  // (console.log, not just silent state) and never blocks longer than 6s —
+  // a previous attempt at this left the Mini App on an empty dashboard with
+  // no visible error, which was undebuggable without a real device. This
+  // version always falls back to the normal OAuth button if anything about
+  // the auto-login doesn't work out, instead of getting stuck.
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
     const initData = webApp?.initData;
+    console.log('[telegram-webapp] initData present:', !!initData, 'length:', initData?.length ?? 0);
     if (!initData) return;
 
-    webApp?.ready();
-    webApp?.expand();
+    try {
+      webApp?.ready();
+      webApp?.expand();
+    } catch (e) {
+      console.error('[telegram-webapp] ready()/expand() threw', e);
+    }
 
     setLoading(true);
     setError('');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      console.error('[telegram-webapp] auto-login timed out after 6s, falling back to manual login');
+      controller.abort();
+      setLoading(false);
+    }, 6000);
+
     fetch('/api/v1/auth/telegram-webapp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData }),
+      signal: controller.signal,
     })
-      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
-      .then(({ ok, data }) => {
+      .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+      .then(({ ok, status, data }) => {
+        clearTimeout(timeout);
+        console.log('[telegram-webapp] auto-login response', status, data);
         if (ok) {
           localStorage.setItem('auth_token', data.token);
           localStorage.setItem('refresh_token', data.refreshToken);
@@ -89,12 +102,14 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
           setLoading(false);
         }
       })
-      .catch(() => {
+      .catch(e => {
+        clearTimeout(timeout);
+        if (e.name === 'AbortError') return; // already handled by the timeout above
+        console.error('[telegram-webapp] auto-login fetch threw', e);
         setError('Network error');
         setLoading(false);
       });
   }, [onToken]);
-  */
 
   // Legacy query-string token hand-off (kept for the refresh-token flow after login).
   useEffect(() => {
