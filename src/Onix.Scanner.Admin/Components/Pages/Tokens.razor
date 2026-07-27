@@ -112,7 +112,7 @@ else
                                @onchange="@(e => SetBingxSymbol(t, (string)e.Value!))" />
                     </td>
                     <td>
-                        <input type="checkbox" checked="@t.Enabled"
+                        <input type="checkbox" class="form-check-input" checked="@t.Enabled"
                                @onchange="@(e => ToggleEnabled(t, (bool)e.Value!))" />
                     </td>
                     <td>@(t.IsAvailableOnCex ? "yes" : "no")</td>

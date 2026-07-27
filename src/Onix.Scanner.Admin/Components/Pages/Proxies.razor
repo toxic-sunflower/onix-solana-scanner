@@ -84,7 +84,7 @@ else
                     <td>@p.Host:@p.Port</td>
                     <td>@p.Type</td>
                     <td>
-                        <input type="checkbox" checked="@p.Enabled" @onchange="@(e => ToggleEnabled(p, (bool)e.Value!))" />
+                        <input type="checkbox" class="form-check-input" checked="@p.Enabled" @onchange="@(e => ToggleEnabled(p, (bool)e.Value!))" />
                     </td>
                     <td>@StatusBadge(p.Status)</td>
                     <td>@(p.LatencyMs is null ? "—" : $"{p.LatencyMs}ms")</td>
