@@ -4,6 +4,7 @@ using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Onix.Scanner.Admin.Components;
@@ -36,6 +37,21 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Without this, Data Protection keys live only in the container's own
+// filesystem/memory — every `docker compose up -d admin` on deploy recreates
+// the container, generates a fresh key, and invalidates every login cookie
+// that came before it. Persisting to a bind-mounted host directory (see
+// docker-compose.yml) means the keyring survives redeploys, so logging in
+// stays valid across them instead of forcing a re-login every time.
+var keysPath = builder.Configuration["DataProtectionKeysPath"];
+if (!string.IsNullOrEmpty(keysPath))
+{
+    Directory.CreateDirectory(keysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath))
+        .SetApplicationName("OnixAdmin");
+}
 
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddCascadingAuthenticationState();

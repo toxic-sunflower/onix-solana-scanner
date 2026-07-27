@@ -31,3 +31,7 @@ Thumbs.db
 # Swap
 *.swp
 publish/
+
+# Admin Data Protection keyring (bind-mounted on the server, contains
+# key material that could forge auth cookies if leaked — never commit)
+data/

@@ -67,10 +67,16 @@ services:
     container_name: onix_admin
     network_mode: host
     env_file: .env
+    volumes:
+      # Data Protection keyring — survives container recreation on deploy,
+      # so login cookies stay valid instead of forcing a re-login every time
+      # (see Program.cs comment).
+      - ./data/admin-keys:/keys
     environment:
       - ASPNETCORE_ENVIRONMENT=Production
       - ASPNETCORE_URLS=http://127.0.0.1:5050
       - PathBase=/admin
+      - DataProtectionKeysPath=/keys
       - Admin__Username=${ADMIN_USERNAME}
       - Admin__Password=${ADMIN_PASSWORD}
       - Encryption__Key=${ENCRYPTION_KEY}
