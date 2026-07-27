@@ -85,6 +85,7 @@ else
             <tr>
                 <th>Symbol</th>
                 <th>Name</th>
+                <th>BingX Symbol</th>
                 <th>Enabled</th>
                 <th>CEX</th>
                 <th>Proxy</th>
@@ -102,6 +103,11 @@ else
                 <tr class="@RowClass(t, s.Count)">
                     <td><strong>@t.Symbol</strong></td>
                     <td>@t.Name</td>
+                    <td>
+                        <input class="form-control form-control-sm" style="width:130px" value="@t.BingxSymbol"
+                               title="Тикер на BingX (например SOL-USDT) — по нему сопоставляется CEX-цена с этим токеном"
+                               @onchange="@(e => SetBingxSymbol(t, (string)e.Value!))" />
+                    </td>
                     <td>
                         <input type="checkbox" checked="@t.Enabled"
                                @onchange="@(e => ToggleEnabled(t, (bool)e.Value!))" />
@@ -265,6 +271,19 @@ else
         tracked.ProxyId = string.IsNullOrEmpty(proxyIdRaw) ? null : Guid.Parse(proxyIdRaw);
         tracked.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task SetBingxSymbol(Token t, string bingxSymbol)
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var tracked = await db.Tokens.FindAsync(t.Id);
+        if (tracked is null) return;
+        tracked.BingxSymbol = bingxSymbol;
+        tracked.BingxUrl = $"https://bingx.com/en/perpetual/{bingxSymbol}";
+        tracked.UpdatedAt = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+        Logger.LogWarning("Admin changed BingX symbol for {Symbol} to {BingxSymbol} — verify this matches the same real-world project (TZ 5, AVA incident)", t.Symbol, bingxSymbol);
         await LoadAsync();
     }
 
