@@ -22,6 +22,7 @@ public class AuthController : ControllerBase
     private readonly JwtTokenService _jwt;
     private readonly TelegramOpenIdValidator _openIdValidator;
     private readonly TelegramOAuthClient _oauthClient;
+    private readonly TelegramWebAppAuthValidator _webAppValidator;
     private readonly Services.TelegramNotificationService? _telegram;
     private readonly ILogger<AuthController> _logger;
 
@@ -32,6 +33,7 @@ public class AuthController : ControllerBase
         JwtTokenService jwt,
         TelegramOpenIdValidator openIdValidator,
         TelegramOAuthClient oauthClient,
+        TelegramWebAppAuthValidator webAppValidator,
         ILogger<AuthController> logger,
         Services.TelegramNotificationService? telegram = null)
     {
@@ -40,6 +42,7 @@ public class AuthController : ControllerBase
         _jwt = jwt;
         _openIdValidator = openIdValidator;
         _oauthClient = oauthClient;
+        _webAppValidator = webAppValidator;
         _telegram = telegram;
         _logger = logger;
         _appUrl = (config.GetValue<string>("App:Url") ?? "http://localhost:5000").Trim();
@@ -105,14 +108,37 @@ public class AuthController : ControllerBase
         var username = principal.FindFirstValue("preferred_username");
         var displayName = principal.FindFirstValue("given_name") ?? principal.FindFirstValue("name") ?? username;
 
+        return await FinalizeLoginAsync(telegramId.Value, username, displayName, ct);
+    }
+
+    /// <summary>Mini App auto-login: when the page is opened inside Telegram
+    /// (not a plain browser tab), the client sends Telegram's own signed
+    /// `window.Telegram.WebApp.initData` instead of going through the OAuth
+    /// redirect — Telegram already told us who this is, no reason to make
+    /// them log in a second time.</summary>
+    [AllowAnonymous]
+    [HttpPost("telegram-webapp")]
+    public async Task<ActionResult> LoginWithTelegramWebApp([FromBody] TelegramWebAppLoginRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.InitData))
+            return BadRequest(new { error = "init_data_required" });
+
+        if (!_webAppValidator.TryValidate(request.InitData, out var telegramId, out var username, out var displayName))
+            return Unauthorized(new { error = "invalid_init_data" });
+
+        return await FinalizeLoginAsync(telegramId, username, displayName, ct);
+    }
+
+    private async Task<ActionResult> FinalizeLoginAsync(long telegramId, string? username, string? displayName, CancellationToken ct)
+    {
         try
         {
-            var user = await _userRepo.GetByTelegramIdAsync(telegramId.Value, ct);
+            var user = await _userRepo.GetByTelegramIdAsync(telegramId, ct);
             if (user is null)
             {
                 user = new User
                 {
-                    TelegramId = telegramId.Value,
+                    TelegramId = telegramId,
                     TelegramUsername = username,
                     DisplayName = displayName,
                     LastLoginAt = DateTime.UtcNow
@@ -152,7 +178,7 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to create/update user or issue tokens after OpenID login");
+            _logger.LogError(ex, "Failed to create/update user or issue tokens after login");
             return StatusCode(500, new { error = "login_finalize_error" });
         }
     }
@@ -473,6 +499,11 @@ public class AuthController : ControllerBase
     {
         public string Code { get; set; } = string.Empty;
         public string CodeVerifier { get; set; } = string.Empty;
+    }
+
+    public class TelegramWebAppLoginRequest
+    {
+        public string InitData { get; set; } = string.Empty;
     }
 
     public class RefreshRequest

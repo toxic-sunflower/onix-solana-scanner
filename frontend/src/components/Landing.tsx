@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react';
 
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        initData: string;
+        ready: () => void;
+        expand: () => void;
+      };
+    };
+  }
+}
+
 const VERIFIER_KEY = 'tg_oauth_code_verifier';
 const STATE_KEY = 'tg_oauth_state';
 
@@ -41,6 +53,43 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
       .then(c => setConfig(c))
       .catch(() => setError('Config load failed'));
   }, []);
+
+  // Mini App auto-login: when this page is opened inside Telegram (not a
+  // plain browser tab), Telegram already signed-and-handed-us who the user
+  // is via window.Telegram.WebApp.initData — going through the OAuth
+  // redirect on top of that is what "миниапп требует отдельно залогиниться"
+  // was about. If initData is present, skip the button entirely.
+  useEffect(() => {
+    const webApp = window.Telegram?.WebApp;
+    const initData = webApp?.initData;
+    if (!initData) return;
+
+    webApp?.ready();
+    webApp?.expand();
+
+    setLoading(true);
+    setError('');
+    fetch('/api/v1/auth/telegram-webapp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData }),
+    })
+      .then(r => r.json().then(d => ({ ok: r.ok, data: d })))
+      .then(({ ok, data }) => {
+        if (ok) {
+          localStorage.setItem('auth_token', data.token);
+          localStorage.setItem('refresh_token', data.refreshToken);
+          onToken(data.token);
+        } else {
+          setError(data.error || 'Login failed');
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        setError('Network error');
+        setLoading(false);
+      });
+  }, [onToken]);
 
   // Legacy query-string token hand-off (kept for the refresh-token flow after login).
   useEffect(() => {

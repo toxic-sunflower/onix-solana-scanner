@@ -146,6 +146,7 @@ builder.Services.AddHttpClient<TelegramOpenIdValidator>()
 builder.Services.AddHttpClient<TelegramOAuthClient>()
     .ConfigurePrimaryHttpMessageHandler(() =>
         new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
+builder.Services.AddSingleton<TelegramWebAppAuthValidator>();
 
 builder.Services.AddSingleton<SseBroadcaster>();
 builder.Services.AddSingleton<ITokenSnapshotPool, TokenSnapshotPool>();
