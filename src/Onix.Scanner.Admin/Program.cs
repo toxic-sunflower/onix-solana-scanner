@@ -110,6 +110,12 @@ if (!app.Environment.IsDevelopment())
 app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
 app.UseHttpsRedirection();
 
+// Must run before auth — the global FallbackPolicy (RequireAuthenticatedUser)
+// otherwise redirects EVERY static asset request to /login for a logged-out
+// visitor, including the login page's own CSS/JS. Static files have to be
+// reachable by definition before you're authenticated.
+app.UseStaticFiles();
+
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -155,7 +161,6 @@ app.MapGet("/logout", async (HttpContext ctx) =>
     return Results.Redirect($"{pathBase}/login");
 });
 
-app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
