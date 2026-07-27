@@ -54,11 +54,15 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
       .catch(() => setError('Config load failed'));
   }, []);
 
-  // Mini App auto-login: when this page is opened inside Telegram (not a
-  // plain browser tab), Telegram already signed-and-handed-us who the user
-  // is via window.Telegram.WebApp.initData — going through the OAuth
-  // redirect on top of that is what "миниапп требует отдельно залогиниться"
-  // was about. If initData is present, skip the button entirely.
+  // Mini App auto-login via window.Telegram.WebApp.initData — TEMPORARILY
+  // DISABLED (2026-07-27): broke the Mini App in production (empty
+  // dashboard) right after shipping, while the plain browser OAuth path
+  // kept working fine. Couldn't reproduce/debug blind without a real
+  // Telegram initData sample, so reverted to the working OAuth-only
+  // behavior for both contexts instead of guessing further on live prod.
+  // The backend endpoint (POST /api/v1/auth/telegram-webapp) is untouched
+  // and safe to re-wire here once this is debugged with real data.
+  /*
   useEffect(() => {
     const webApp = window.Telegram?.WebApp;
     const initData = webApp?.initData;
@@ -90,6 +94,7 @@ export default function Landing({ onToken }: { onToken: (token: string) => void 
         setLoading(false);
       });
   }, [onToken]);
+  */
 
   // Legacy query-string token hand-off (kept for the refresh-token flow after login).
   useEffect(() => {
