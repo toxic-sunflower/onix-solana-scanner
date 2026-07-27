@@ -85,12 +85,12 @@ h1:focus {
 .btn-secondary, .btn-outline-primary {
     color: var(--onix-text-dim);
     background-color: var(--onix-panel-alt);
-    border-color: var(--onix-border);
+    border-color: #3a3b48;
 }
 .btn-secondary:hover, .btn-outline-primary:hover {
     color: var(--onix-text);
-    background-color: var(--onix-border);
-    border-color: var(--onix-border);
+    background-color: #3a3b48;
+    border-color: #3a3b48;
 }
 
 .btn-success {
@@ -138,7 +138,7 @@ h1:focus {
 }
 .form-check-input {
     background-color: var(--onix-panel-alt);
-    border: 1px solid var(--onix-text-dim);
+    border: 1px solid var(--onix-border);
     border-radius: 4px;
     width: 1.1em;
     height: 1.1em;

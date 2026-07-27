@@ -130,7 +130,20 @@ app.UseHttpsRedirection();
 // otherwise redirects EVERY static asset request to /login for a logged-out
 // visitor, including the login page's own CSS/JS. Static files have to be
 // reachable by definition before you're authenticated.
-app.UseStaticFiles();
+//
+// These paths are referenced literally (no fingerprint hash — see App.razor),
+// so nothing forces the browser to fetch a fresh copy after a deploy changes
+// the file. no-cache doesn't disable caching, it just makes the browser
+// revalidate (If-None-Match) on every request instead of trusting a cached
+// copy blindly — cheap for a low-traffic internal tool, and it's what stops
+// a stale/broken CSS response from one deploy haunting every deploy after it.
+app.UseStaticFiles(new Microsoft.AspNetCore.Builder.StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers.CacheControl = "no-cache";
+    }
+});
 
 app.UseRateLimiter();
 app.UseAuthentication();
