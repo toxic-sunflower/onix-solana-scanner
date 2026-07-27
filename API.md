@@ -18,6 +18,7 @@ full flow description.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | POST | `/auth/openid` | AllowAnonymous | Exchange `{code, codeVerifier}` (PKCE) for a session. Backend exchanges the code for an id_token, validates it, creates/updates the user, issues `{token, refreshToken}`. Also best-effort starts the Telegram bot dialog for the user. |
+| POST | `/auth/telegram-webapp` | AllowAnonymous | `{initData}` — Mini App auto-login. Validates Telegram's signed `window.Telegram.WebApp.initData` (HMAC-SHA256 with the bot token) instead of the OAuth redirect; issues the same `{token, refreshToken}`. Used automatically by the frontend when it detects it's running inside Telegram. |
 | GET | `/auth/check` | required | Returns `{userId, telegramId, role, tier, demoSecondsUsed, demoQuotaSeconds, hasPaidAccess}`. Used to validate a token is still good and to detect if the demo quota ran out. |
 | POST | `/auth/refresh` | AllowAnonymous | `{refreshToken}` → new `{token, refreshToken}`. Old refresh token is invalidated (rotation). |
 | POST | `/auth/revoke` | required | Log out the current session (`{refreshToken}`). |
